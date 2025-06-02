@@ -126,6 +126,7 @@ def main():
         with col1:
             if st.button("🚀 Start Validation", type="primary", disabled=st.session_state.validation_in_progress):
                 st.session_state.validation_in_progress = True
+                st.session_state.validation_results = []  # Clear previous results on new start
                 st.rerun()
         
         with col2:
@@ -170,6 +171,7 @@ def main():
                 with col1:
                     if st.button("🚀 Start Validation", type="primary", disabled=st.session_state.validation_in_progress, key="start_upload"):
                         st.session_state.validation_in_progress = True
+                        st.session_state.validation_results = []  # Clear previous results on new start
                         st.rerun()
                 
                 with col2:
@@ -228,10 +230,6 @@ def main():
 def run_validation(relay_data=None):
     """Run AROI validation with progress tracking"""
     st.session_state.validation_in_progress = True
-    
-    # Only clear results if starting fresh, not if resuming
-    if st.session_state.validation_results is None:
-        st.session_state.validation_results = []
     
     try:
         validator = AROIValidator()
