@@ -270,19 +270,9 @@ class AROIValidator:
             aroi_info = self.parse_aroi_tokens(contact)
             
             if contact:
-                # Display contact info with show/hide toggle
                 ui_container.write(f"Contact length: {len(contact)} characters")
-                
-                # Show first part of contact and option to view full
-                preview_length = 100
-                if len(contact) > preview_length:
-                    ui_container.write(f"Preview: {contact[:preview_length]}...")
-                    
-                    # Use code block for full contact display
-                    if ui_container.checkbox(f"Show full contact", key=f"show_contact_{fingerprint[:8]}"):
-                        ui_container.code(contact, language="text")
-                else:
-                    ui_container.code(contact, language="text")
+                # Display full contact info in a code block with horizontal scrolling
+                ui_container.code(contact)
             else:
                 ui_container.write("❌ No contact information found")
             
