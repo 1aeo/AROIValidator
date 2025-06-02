@@ -116,18 +116,6 @@ def run_validation(relay_data=None):
             fingerprint = relay.get('fingerprint', 'N/A')
             status_text.text(f"🔍 Validating relay {i + 1}/{len(relays)}: {nickname}")
             
-            # Validate individual relay with step tracking
-            result = validator.validate_relay_with_steps(relay, st.container())
-            results.append(result)
-            
-            # Update session state after each validation
-            st.session_state.validation_results = results.copy()
-            
-            # Update live status display
-            valid_count = sum(1 for r in results if r['valid'])
-            total_count = len(results)
-            live_status.info(f"📊 Live Status: {valid_count}/{total_count} valid ({(valid_count/total_count*100):.1f}%)")
-            
             with validation_details:
                 st.write(f"**Relay {i + 1}: {nickname}** (`{fingerprint[:16]}...`)")
                 
@@ -136,8 +124,13 @@ def run_validation(relay_data=None):
                 
                 with col1:
                     checklist_container = st.container()
-                    # Re-run validation for detailed display
-                    validator.validate_relay_with_steps(relay, checklist_container)
+                
+                # Validate individual relay with step tracking (only once, inside dropdown)
+                result = validator.validate_relay_with_steps(relay, checklist_container)
+                results.append(result)
+                
+                # Update session state after each validation
+                st.session_state.validation_results = results.copy()
                 
                 with col2:
                     if result['valid']:
@@ -147,6 +140,11 @@ def run_validation(relay_data=None):
                 
                 if i < len(relays) - 1:  # Don't add divider after last relay
                     st.divider()
+            
+            # Update live status display after validation
+            valid_count = sum(1 for r in results if r['valid'])
+            total_count = len(results)
+            live_status.info(f"📊 Live Status: {valid_count}/{total_count} valid ({(valid_count/total_count*100):.1f}%)")
         
         # Final update to session state
         st.session_state.validation_results = results
