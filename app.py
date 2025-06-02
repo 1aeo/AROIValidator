@@ -14,62 +14,62 @@ def main():
     if 'validation_in_progress' not in st.session_state:
         st.session_state.validation_in_progress = False
     
-    # Create tabs
-    tab1, tab2, tab3 = st.tabs(["🚀 Validate", "📊 Results", "📁 Export"])
+    # Main layout with sections
+    st.header("🚀 Validation Setup")
     
-    with tab1:
-        st.header("Data Source")
+    # Data source selection
+    data_source = st.radio(
+        "Choose data source:",
+        ["Fetch from Onionoo API", "Upload JSON file"],
+        help="Fetch relay data automatically from Tor's Onionoo API or upload your own relay data file"
+    )
+    
+    if data_source == "Fetch from Onionoo API":
+        st.info("This will fetch relay data from https://onionoo.torproject.org/details")
         
-        # Data source selection
-        data_source = st.radio(
-            "Choose data source:",
-            ["Fetch from Onionoo API", "Upload JSON file"],
-            help="Fetch relay data automatically from Tor's Onionoo API or upload your own relay data file"
+        if st.button("🔄 Fetch and Validate Relays", disabled=st.session_state.validation_in_progress):
+            run_validation()
+            
+    else:  # Upload JSON file
+        st.info("Upload a JSON file containing relay data with fingerprint, nickname, and contact fields")
+        
+        uploaded_file = st.file_uploader(
+            "Choose a JSON file",
+            type="json",
+            help="File should contain relay data in Onionoo format"
         )
         
-        if data_source == "Fetch from Onionoo API":
-            st.info("This will fetch relay data from https://onionoo.torproject.org/details")
-            
-            if st.button("🔄 Fetch and Validate Relays", disabled=st.session_state.validation_in_progress):
-                run_validation()
+        if uploaded_file is not None:
+            try:
+                file_content = uploaded_file.read()
+                relay_data = json.loads(file_content)
                 
-        else:  # Upload JSON file
-            st.info("Upload a JSON file containing relay data with fingerprint, nickname, and contact fields")
-            
-            uploaded_file = st.file_uploader(
-                "Choose a JSON file",
-                type="json",
-                help="File should contain relay data in Onionoo format"
-            )
-            
-            if uploaded_file is not None:
-                try:
-                    file_content = uploaded_file.read()
-                    relay_data = json.loads(file_content)
+                # Validate file structure
+                if isinstance(relay_data, dict) and "relays" in relay_data:
+                    relays = relay_data["relays"]
+                elif isinstance(relay_data, list):
+                    relays = relay_data
+                else:
+                    st.error("Invalid file format. Expected JSON with 'relays' array or direct array of relays.")
+                    return
+                
+                st.success(f"✅ Loaded {len(relays)} relays from file")
+                
+                if st.button("🔍 Validate Uploaded Data", disabled=st.session_state.validation_in_progress):
+                    run_validation(relays)
                     
-                    # Validate file structure
-                    if isinstance(relay_data, dict) and "relays" in relay_data:
-                        relays = relay_data["relays"]
-                    elif isinstance(relay_data, list):
-                        relays = relay_data
-                    else:
-                        st.error("Invalid file format. Expected JSON with 'relays' array or direct array of relays.")
-                        return
-                    
-                    st.success(f"✅ Loaded {len(relays)} relays from file")
-                    
-                    if st.button("🔍 Validate Uploaded Data", disabled=st.session_state.validation_in_progress):
-                        run_validation(relays)
-                        
-                except json.JSONDecodeError:
-                    st.error("❌ Invalid JSON file. Please check the file format.")
-                except Exception as e:
-                    st.error(f"❌ Error reading file: {str(e)}")
+            except json.JSONDecodeError:
+                st.error("❌ Invalid JSON file. Please check the file format.")
+            except Exception as e:
+                st.error(f"❌ Error reading file: {str(e)}")
     
-    with tab2:
-        display_results()
+    # Results section (always visible)
+    st.divider()
+    display_results()
     
-    with tab3:
+    # Export section (only show if results exist)
+    if st.session_state.validation_results is not None and len(st.session_state.validation_results) > 0:
+        st.divider()
         export_results()
 
 def run_validation(relay_data=None):
