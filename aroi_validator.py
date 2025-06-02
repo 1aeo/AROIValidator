@@ -1,0 +1,266 @@
+import requests
+import dns.resolver
+import dns.query
+import dns.message
+import dns.flags
+import dns.rdatatype
+import json
+from typing import List, Dict, Any, Optional
+
+class AROIValidator:
+    """Validator for Tor relay AROI (Autonomous Relay Operator Identity) proofs"""
+    
+    def __init__(self):
+        """Initialize the AROI validator with DNSSEC-validating resolver"""
+        # Set up a DNSSEC-validating resolver (Cloudflare 1.1.1.1)
+        self.dns_resolver = dns.resolver.Resolver()
+        self.dns_resolver.nameservers = ["1.1.1.1"]
+        
+        # Onionoo API endpoint
+        self.onionoo_url = "https://onionoo.torproject.org/details?type=relay&fields=fingerprint,nickname,contact"
+    
+    def fetch_relay_data(self) -> List[Dict[str, Any]]:
+        """
+        Fetch relay data from Onionoo API
+        
+        Returns:
+            List of relay dictionaries with fingerprint, nickname, and contact fields
+            
+        Raises:
+            requests.RequestException: If the API request fails
+            ValueError: If the response format is invalid
+        """
+        try:
+            response = requests.get(self.onionoo_url, timeout=30)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            raise requests.RequestException(f"Failed to fetch data from Onionoo: {e}")
+        
+        try:
+            data = response.json()
+            relays = data.get("relays", [])
+        except (json.JSONDecodeError, AttributeError) as e:
+            raise ValueError(f"Invalid JSON response from Onionoo: {e}")
+        
+        if not isinstance(relays, list):
+            raise ValueError("Expected 'relays' to be a list in Onionoo response")
+            
+        return relays
+    
+    def parse_aroi_tokens(self, contact: str) -> Dict[str, Optional[str]]:
+        """
+        Parse AROI tokens from relay contact information
+        
+        Args:
+            contact: Contact string from relay descriptor
+            
+        Returns:
+            Dictionary with url, proof, and ciissversion tokens
+        """
+        aroi_info = {}
+        
+        # Extract AROI tokens (url:, proof:, ciissversion:)
+        for token in contact.split():
+            if token.startswith("url:"):
+                aroi_info["url"] = token[len("url:"):]
+            elif token.startswith("proof:"):
+                aroi_info["proof"] = token[len("proof:"):]
+            elif token.startswith("ciissversion:"):
+                aroi_info["ciissversion"] = token[len("ciissversion:"):]
+        
+        return aroi_info
+    
+    def validate_dns_rsa_proof(self, fingerprint: str, domain: str) -> tuple[bool, Optional[str]]:
+        """
+        Validate DNS-RSA proof for a relay
+        
+        Args:
+            fingerprint: Relay fingerprint
+            domain: Domain for DNS verification
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        record_name = f"{fingerprint.lower()}.{domain}"
+        
+        try:
+            # Build DNS query with DNSSEC (DO flag) and request AD bit
+            query = dns.message.make_query(record_name, dns.rdatatype.TXT, want_dnssec=True)
+            query.flags |= dns.flags.AD
+            
+            # First try UDP
+            response = dns.query.udp(query, self.dns_resolver.nameservers[0], timeout=5)
+            if response.flags & dns.flags.TC:
+                # If truncated, retry over TCP
+                response = dns.query.tcp(query, self.dns_resolver.nameservers[0], timeout=5)
+                
+        except Exception as e:
+            return False, f"DNS query exception: {e}"
+        
+        # Collect all TXT strings in the response
+        txt_values = []
+        for answer in response.answer:
+            if answer.rdtype == dns.rdatatype.TXT:
+                for txt_data in answer:
+                    txt_val = b"".join(txt_data.strings).decode("utf-8", errors="ignore")
+                    txt_values.append(txt_val)
+        
+        expected_value = "we-run-this-tor-relay"
+        
+        if not txt_values:
+            return False, f"No TXT records found at {record_name}; expected '{expected_value}'."
+        
+        if expected_value not in txt_values:
+            found_vals = ", ".join(f"'{v}'" for v in txt_values)
+            return False, (
+                f"TXT record mismatch at {record_name}: found {found_vals}; "
+                f"expected '{expected_value}'."
+            )
+        
+        # Check DNSSEC validation
+        dnssec_valid = bool(response.flags & dns.flags.AD)
+        if not dnssec_valid:
+            return False, "DNSSEC validation failed (AD flag not set)."
+        
+        return True, None
+    
+    def validate_uri_rsa_proof(self, fingerprint: str, domain: str) -> tuple[bool, Optional[str]]:
+        """
+        Validate URI-RSA proof for a relay
+        
+        Args:
+            fingerprint: Relay fingerprint
+            domain: Domain for URI verification
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        proof_url = f"https://{domain}/.well-known/tor-relay/rsa-fingerprint.txt"
+        
+        try:
+            # Fetch without following redirects automatically
+            resp = requests.get(proof_url, timeout=10, allow_redirects=False)
+            
+            # If redirect, ensure it stays on the same domain
+            if 300 <= resp.status_code < 400:
+                redirect_loc = resp.headers.get("Location", "")
+                if not redirect_loc or domain not in redirect_loc:
+                    return False, f"Redirect to disallowed domain: '{redirect_loc}'."
+                
+                resp = requests.get(redirect_loc, timeout=10, allow_redirects=False)
+            
+            resp.raise_for_status()
+            
+        except requests.RequestException as e:
+            return False, f"HTTP exception: {e}"
+        
+        if resp.status_code != 200:
+            return False, f"HTTP returned status {resp.status_code} from '{proof_url}'."
+        
+        # Check that fingerprint appears in the file (case-insensitive)
+        content = resp.text
+        relay_fp = fingerprint.upper()
+        found = any(line.strip().upper() == relay_fp for line in content.splitlines())
+        
+        if not found:
+            return False, f"Fingerprint '{relay_fp}' not found in .well-known file at '{proof_url}'."
+        
+        return True, None
+    
+    def normalize_domain(self, url: str) -> str:
+        """
+        Normalize domain by stripping scheme and trailing slash
+        
+        Args:
+            url: URL to normalize
+            
+        Returns:
+            Normalized domain string
+        """
+        domain = url
+        if domain.startswith("http://") or domain.startswith("https://"):
+            domain = domain.split("://", 1)[1]
+        domain = domain.rstrip("/")
+        return domain
+    
+    def validate_relay(self, relay: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate AROI proof for a single relay
+        
+        Args:
+            relay: Relay dictionary with fingerprint, nickname, and contact
+            
+        Returns:
+            Dictionary with validation results and error information
+        """
+        fingerprint = relay.get("fingerprint")
+        contact = relay.get("contact", "")
+        nickname = relay.get("nickname", "")
+        
+        # Parse AROI tokens from contact information
+        aroi_info = self.parse_aroi_tokens(contact)
+        
+        # Check for missing fields
+        missing_fields = [field for field in ("url", "proof", "ciissversion") if field not in aroi_info]
+        if missing_fields:
+            return {
+                "fingerprint": fingerprint,
+                "nickname": nickname,
+                "domain": aroi_info.get("url", None),
+                "proof_type": aroi_info.get("proof", None),
+                "ciissversion": aroi_info.get("ciissversion", None),
+                "valid": False,
+                "error": f"Missing AROI fields: {', '.join(missing_fields)}."
+            }
+        
+        # Check version support
+        version = aroi_info["ciissversion"]
+        if version != "2":
+            return {
+                "fingerprint": fingerprint,
+                "nickname": nickname,
+                "domain": aroi_info["url"],
+                "proof_type": aroi_info["proof"],
+                "ciissversion": version,
+                "valid": False,
+                "error": f"Unsupported ciissversion: {version}"
+            }
+        
+        # Normalize domain
+        domain = self.normalize_domain(aroi_info["url"])
+        proof_type = aroi_info["proof"]
+        
+        # Validate based on proof type
+        if proof_type == "dns-rsa":
+            valid, error_msg = self.validate_dns_rsa_proof(fingerprint, domain)
+        elif proof_type == "uri-rsa":
+            valid, error_msg = self.validate_uri_rsa_proof(fingerprint, domain)
+        else:
+            valid = False
+            error_msg = f"Unsupported proof type: '{proof_type}'."
+        
+        return {
+            "fingerprint": fingerprint,
+            "nickname": nickname,
+            "domain": domain,
+            "proof_type": proof_type,
+            "ciissversion": version,
+            "valid": valid,
+            "error": error_msg
+        }
+    
+    def validate_relays(self, relays: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Validate AROI proofs for multiple relays
+        
+        Args:
+            relays: List of relay dictionaries
+            
+        Returns:
+            List of validation result dictionaries
+        """
+        results = []
+        for relay in relays:
+            result = self.validate_relay(relay)
+            results.append(result)
+        return results
