@@ -4,6 +4,99 @@ import json
 import io
 from aroi_validator import AROIValidator
 
+def display_results_summary():
+    """Display the validation results summary and details"""
+    results = st.session_state.validation_results
+    
+    if not results:
+        return
+    
+    # Summary statistics
+    total_relays = len(results)
+    valid_relays = sum(1 for r in results if r['valid'])
+    invalid_relays = total_relays - valid_relays
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Relays", total_relays)
+    with col2:
+        st.metric("Valid AROI", valid_relays, delta=f"{(valid_relays/total_relays*100):.1f}%")
+    with col3:
+        st.metric("Invalid AROI", invalid_relays, delta=f"{(invalid_relays/total_relays*100):.1f}%")
+    
+    # Color-coded validation status summary
+    st.subheader("🎨 Color-Coded Status Overview")
+    
+    # Calculate validation statistics by categories
+    dns_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'dns-rsa' and r['valid'])
+    dns_rsa_total = sum(1 for r in results if r.get('proof_type') == 'dns-rsa')
+    uri_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'uri-rsa' and r['valid'])
+    uri_rsa_total = sum(1 for r in results if r.get('proof_type') == 'uri-rsa')
+    missing_fields = sum(1 for r in results if 'Missing AROI fields' in str(r.get('error', '')))
+    unsupported_version = sum(1 for r in results if 'Unsupported ciissversion' in str(r.get('error', '')))
+    unsupported_proof = sum(1 for r in results if 'Unsupported proof type' in str(r.get('error', '')))
+    
+    # Create visual status summary with color coding
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Validation by Proof Type:**")
+        
+        # DNS-RSA validation
+        if dns_rsa_total > 0:
+            dns_success_rate = (dns_rsa_valid / dns_rsa_total) * 100
+            if dns_success_rate >= 80:
+                color = "🟢"
+            elif dns_success_rate >= 50:
+                color = "🟡"
+            else:
+                color = "🔴"
+            st.write(f"{color} DNS-RSA: {dns_rsa_valid}/{dns_rsa_total} ({dns_success_rate:.1f}%)")
+        
+        # URI-RSA validation
+        if uri_rsa_total > 0:
+            uri_success_rate = (uri_rsa_valid / uri_rsa_total) * 100
+            if uri_success_rate >= 80:
+                color = "🟢"
+            elif uri_success_rate >= 50:
+                color = "🟡"
+            else:
+                color = "🔴"
+            st.write(f"{color} URI-RSA: {uri_rsa_valid}/{uri_rsa_total} ({uri_success_rate:.1f}%)")
+    
+    with col2:
+        st.write("**Common Issues:**")
+        
+        if missing_fields > 0:
+            st.write(f"🔴 Missing Fields: {missing_fields} relays")
+        
+        if unsupported_version > 0:
+            st.write(f"🟠 Unsupported Version: {unsupported_version} relays")
+        
+        if unsupported_proof > 0:
+            st.write(f"🟠 Unsupported Proof Type: {unsupported_proof} relays")
+        
+        if missing_fields == 0 and unsupported_version == 0 and unsupported_proof == 0:
+            st.write("🟢 No common configuration issues found")
+    
+    # Overall health indicator
+    overall_success_rate = (valid_relays / total_relays) * 100 if total_relays > 0 else 0
+    
+    if overall_success_rate >= 80:
+        health_color = "🟢"
+        health_status = "Excellent"
+    elif overall_success_rate >= 60:
+        health_color = "🟡"
+        health_status = "Good"
+    elif overall_success_rate >= 40:
+        health_color = "🟠"
+        health_status = "Fair"
+    else:
+        health_color = "🔴"
+        health_status = "Poor"
+    
+    st.info(f"{health_color} **Overall Validation Health: {health_status}** ({overall_success_rate:.1f}% success rate)")
+
 def main():
     st.title("🔍 Tor Relay AROI Validator")
     st.markdown("Validate Tor relay AROI (Autonomous Relay Operator Identity) proofs through DNS and URI verification")
@@ -65,7 +158,23 @@ def main():
     
     # Results section (always visible)
     st.divider()
-    display_results()
+    st.header("📊 Validation Results")
+    
+    # Show status and progress
+    if st.session_state.get('validation_in_progress', False):
+        st.info("Validation in progress...")
+        if st.session_state.validation_results and len(st.session_state.validation_results) > 0:
+            current_count = len(st.session_state.validation_results)
+            valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
+            st.success(f"Progress: {current_count} relays processed, {valid_count} valid")
+    
+    # Always show results content
+    if st.session_state.validation_results is None or len(st.session_state.validation_results) == 0:
+        if not st.session_state.get('validation_in_progress', False):
+            st.info("No validation results yet. Start validation above to see results here.")
+    else:
+        # Show the actual results
+        display_results_summary()
     
     # Export section (only show if results exist)
     if st.session_state.validation_results is not None and len(st.session_state.validation_results) > 0:
@@ -166,224 +275,7 @@ def run_validation(relay_data=None):
     finally:
         st.session_state.validation_in_progress = False
 
-def display_results():
-    """Display validation results in an interactive table"""
-    st.header("📊 Validation Results")
-    
-    # Show status during validation
-    if st.session_state.get('validation_in_progress', False):
-        st.info("Validation in progress...")
-        # Show current progress if any results exist
-        if st.session_state.validation_results and len(st.session_state.validation_results) > 0:
-            current_count = len(st.session_state.validation_results)
-            valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
-            st.write(f"Progress: {current_count} relays processed, {valid_count} valid")
-    
-    if st.session_state.validation_results is None:
-        st.info("No validation results yet. Start validation above to see results here.")
-        return
-    
-    results = st.session_state.validation_results
-    
-    if not results:
-        if st.session_state.get('validation_in_progress', False):
-            st.info("Starting validation...")
-        else:
-            st.info("No validation results available.")
-        return
-    
-    # Summary statistics
-    st.header("📊 Validation Summary")
-    
-    total_relays = len(results)
-    valid_relays = sum(1 for r in results if r['valid'])
-    invalid_relays = total_relays - valid_relays
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Relays", total_relays)
-    with col2:
-        st.metric("Valid AROI", valid_relays, delta=f"{(valid_relays/total_relays*100):.1f}%")
-    with col3:
-        st.metric("Invalid AROI", invalid_relays, delta=f"{(invalid_relays/total_relays*100):.1f}%")
-    
-    # Color-coded validation status summary
-    st.subheader("🎨 Color-Coded Status Overview")
-    
-    # Calculate validation statistics by categories
-    dns_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'dns-rsa' and r['valid'])
-    dns_rsa_total = sum(1 for r in results if r.get('proof_type') == 'dns-rsa')
-    uri_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'uri-rsa' and r['valid'])
-    uri_rsa_total = sum(1 for r in results if r.get('proof_type') == 'uri-rsa')
-    missing_fields = sum(1 for r in results if 'Missing AROI fields' in str(r.get('error', '')))
-    unsupported_version = sum(1 for r in results if 'Unsupported ciissversion' in str(r.get('error', '')))
-    unsupported_proof = sum(1 for r in results if 'Unsupported proof type' in str(r.get('error', '')))
-    
-    # Create visual status summary with color coding
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**Validation by Proof Type:**")
-        
-        # DNS-RSA validation
-        if dns_rsa_total > 0:
-            dns_success_rate = (dns_rsa_valid / dns_rsa_total) * 100
-            if dns_success_rate >= 80:
-                color = "🟢"
-            elif dns_success_rate >= 50:
-                color = "🟡"
-            else:
-                color = "🔴"
-            st.write(f"{color} DNS-RSA: {dns_rsa_valid}/{dns_rsa_total} ({dns_success_rate:.1f}%)")
-        
-        # URI-RSA validation
-        if uri_rsa_total > 0:
-            uri_success_rate = (uri_rsa_valid / uri_rsa_total) * 100
-            if uri_success_rate >= 80:
-                color = "🟢"
-            elif uri_success_rate >= 50:
-                color = "🟡"
-            else:
-                color = "🔴"
-            st.write(f"{color} URI-RSA: {uri_rsa_valid}/{uri_rsa_total} ({uri_success_rate:.1f}%)")
-    
-    with col2:
-        st.write("**Common Issues:**")
-        
-        if missing_fields > 0:
-            st.write(f"🔴 Missing Fields: {missing_fields} relays")
-        
-        if unsupported_version > 0:
-            st.write(f"🟠 Unsupported Version: {unsupported_version} relays")
-        
-        if unsupported_proof > 0:
-            st.write(f"🟠 Unsupported Proof Type: {unsupported_proof} relays")
-        
-        if missing_fields == 0 and unsupported_version == 0 and unsupported_proof == 0:
-            st.write("🟢 No common configuration issues found")
-    
-    # Overall health indicator
-    overall_success_rate = (valid_relays / total_relays) * 100 if total_relays > 0 else 0
-    
-    if overall_success_rate >= 80:
-        health_color = "🟢"
-        health_status = "Excellent"
-    elif overall_success_rate >= 60:
-        health_color = "🟡"
-        health_status = "Good"
-    elif overall_success_rate >= 40:
-        health_color = "🟠"
-        health_status = "Fair"
-    else:
-        health_color = "🔴"
-        health_status = "Poor"
-    
-    st.info(f"{health_color} **Overall Validation Health: {health_status}** ({overall_success_rate:.1f}% success rate)")
-    
-    # Filters
-    st.header("🔍 Filter Results")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        status_filter = st.selectbox(
-            "Validation Status",
-            ["All", "Valid", "Invalid"],
-            help="Filter relays by validation status"
-        )
-    
-    with col2:
-        proof_type_filter = st.selectbox(
-            "Proof Type",
-            ["All"] + list(set(r.get('proof_type', 'N/A') for r in results if r.get('proof_type'))),
-            help="Filter relays by proof type"
-        )
-    
-    search_term = st.text_input(
-        "🔍 Search",
-        placeholder="Search by nickname, fingerprint, or domain...",
-        help="Search across nickname, fingerprint, and domain fields"
-    )
-    
-    # Apply filters
-    filtered_results = results.copy()
-    
-    if status_filter == "Valid":
-        filtered_results = [r for r in filtered_results if r['valid']]
-    elif status_filter == "Invalid":
-        filtered_results = [r for r in filtered_results if not r['valid']]
-    
-    if proof_type_filter != "All":
-        filtered_results = [r for r in filtered_results if r.get('proof_type') == proof_type_filter]
-    
-    if search_term:
-        search_lower = search_term.lower()
-        filtered_results = [
-            r for r in filtered_results
-            if search_lower in r.get('nickname', '').lower()
-            or search_lower in r.get('fingerprint', '').lower()
-            or search_lower in str(r.get('domain', '')).lower()
-        ]
-    
-    # Display results table
-    st.header(f"📋 Results ({len(filtered_results)} relays)")
-    
-    if not filtered_results:
-        st.warning("No relays match the current filters.")
-        return
-    
-    # Convert to DataFrame for better display
-    df_data = []
-    for result in filtered_results:
-        df_data.append({
-            'Status': '✅ Valid' if result['valid'] else '❌ Invalid',
-            'Nickname': result.get('nickname', 'N/A'),
-            'Fingerprint': result.get('fingerprint', 'N/A')[:16] + '...' if result.get('fingerprint') else 'N/A',
-            'Domain': result.get('domain', 'N/A'),
-            'Proof Type': result.get('proof_type', 'N/A'),
-            'Version': result.get('ciissversion', 'N/A'),
-            'Error': result.get('error', 'None')[:50] + '...' if result.get('error') and len(result.get('error', '')) > 50 else result.get('error', 'None')
-        })
-    
-    df = pd.DataFrame(df_data)
-    
-    # Display with styling
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            'Status': st.column_config.TextColumn(width='small'),
-            'Fingerprint': st.column_config.TextColumn(width='medium'),
-            'Error': st.column_config.TextColumn(width='large')
-        }
-    )
-    
-    # Detailed error view
-    st.header("🔍 Detailed Error Analysis")
-    
-    invalid_results = [r for r in filtered_results if not r['valid']]
-    if invalid_results:
-        selected_relay = st.selectbox(
-            "Select relay for detailed error information:",
-            options=range(len(invalid_results)),
-            format_func=lambda i: f"{invalid_results[i].get('nickname', 'Unknown')} ({invalid_results[i].get('fingerprint', 'N/A')[:16]}...)"
-        )
-        
-        if selected_relay is not None:
-            relay = invalid_results[selected_relay]
-            
-            with st.expander("📄 Full Error Details", expanded=True):
-                st.json({
-                    'Fingerprint': relay.get('fingerprint'),
-                    'Nickname': relay.get('nickname'),
-                    'Domain': relay.get('domain'),
-                    'Proof Type': relay.get('proof_type'),
-                    'CIISS Version': relay.get('ciissversion'),
-                    'Valid': relay.get('valid'),
-                    'Error': relay.get('error')
-                })
-    else:
-        st.success("🎉 No errors found in the current filter results!")
+
 
 def export_results():
     """Export validation results"""
