@@ -169,20 +169,17 @@ def run_validation(relay_data=None):
 
 def display_results():
     """Display validation results in an interactive table"""
-    # Add refresh button within the Results tab
+    st.header("📊 Validation Results")
+    
+    # Show status during validation
     if st.session_state.get('validation_in_progress', False):
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.info("Validation in progress...")
-        with col2:
-            if st.button("🔄 Refresh", help="Click to update results during validation"):
-                st.rerun()
+        st.info("Validation in progress...")
     
     if st.session_state.validation_results is None:
         if st.session_state.get('validation_in_progress', False):
             st.info("Starting validation...")
         else:
-            st.info("No validation results yet. Use the 'Validate' tab to start validation.")
+            st.info("No validation results yet. Start validation above to see results here.")
         return
     
     results = st.session_state.validation_results
