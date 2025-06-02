@@ -181,7 +181,7 @@ class AROIValidator:
                 resp.raise_for_status()
                 
                 # Note SSL issue but continue validation
-                ssl_warning = f" (SSL/TLS issue bypassed: {str(ssl_error)[:80]}...)"
+                ssl_warning = f" (SSL/TLS issue bypassed: {str(ssl_error)})"
                 
             except requests.RequestException as e:
                 return False, f"Connection failed even without SSL verification: {str(e)[:100]}..."
