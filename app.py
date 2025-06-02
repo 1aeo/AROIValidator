@@ -125,11 +125,14 @@ def main():
         
         with col1:
             if st.button("🚀 Start Validation", type="primary", disabled=st.session_state.validation_in_progress):
-                run_validation()
+                st.session_state.validation_in_progress = True
+                st.rerun()
         
         with col2:
             if st.button("⏹️ Stop Validation", type="secondary", disabled=not st.session_state.validation_in_progress):
                 st.session_state.validation_in_progress = False
+                if hasattr(st.session_state, 'validation_started'):
+                    del st.session_state.validation_started
                 st.rerun()
             
     else:  # Upload JSON file
@@ -157,22 +160,36 @@ def main():
                 
                 st.success(f"✅ Loaded {len(relays)} relays from file")
                 
+                # Store relays in session state for later use
+                st.session_state.relays = relays
+                
                 # Start and Stop buttons side by side for uploaded data
                 col1, col2 = st.columns(2)
                 
                 with col1:
                     if st.button("🚀 Start Validation", type="primary", disabled=st.session_state.validation_in_progress, key="start_upload"):
-                        run_validation(relays)
+                        st.session_state.validation_in_progress = True
+                        st.rerun()
                 
                 with col2:
                     if st.button("⏹️ Stop Validation", type="secondary", disabled=not st.session_state.validation_in_progress, key="stop_upload"):
                         st.session_state.validation_in_progress = False
+                        if hasattr(st.session_state, 'validation_started'):
+                            del st.session_state.validation_started
                         st.rerun()
                     
             except json.JSONDecodeError:
                 st.error("❌ Invalid JSON file. Please check the file format.")
             except Exception as e:
                 st.error(f"❌ Error reading file: {str(e)}")
+    
+    # Check if validation should start
+    if st.session_state.get('validation_in_progress', False) and not hasattr(st.session_state, 'validation_started'):
+        st.session_state.validation_started = True
+        if data_source == "Fetch from Onionoo API":
+            run_validation()
+        elif 'relays' in st.session_state:
+            run_validation(st.session_state.relays)
     
     # Create a persistent results container
     st.divider()
