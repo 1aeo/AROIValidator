@@ -188,40 +188,91 @@ def main():
         st.divider()
         export_results()
 
-@st.fragment
-def perform_validation(relay_data=None):
-    """Perform the actual validation work"""
+def run_validation(relay_data=None):
+    """Run AROI validation with progress tracking"""
+    st.session_state.validation_in_progress = True
+    
     try:
         validator = AROIValidator()
         
-        # Get relay data
+        # Create progress containers
+        progress_container = st.container()
+        with progress_container:
+            st.info("🚀 Starting validation process...")
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+        
+        # Fetch or use provided relay data
         if relay_data is None:
+            status_text.text("📡 Fetching relay data from Onionoo...")
             relays = validator.fetch_relay_data()
+            st.success(f"✅ Fetched {len(relays)} relays from Onionoo")
         else:
             relays = relay_data
+            st.success(f"✅ Using {len(relays)} relays from uploaded file")
         
-        # Process each relay
+        # Validate relays
+        status_text.text("🔍 Validating AROI proofs...")
+        results = []
+        
+        # Create live status display at the top
+        live_status = st.empty()
+        
+        # Create container for detailed validation steps (collapsed by default)
+        validation_details = st.expander("Detailed Validation Steps", expanded=False)
+        
         for i, relay in enumerate(relays):
-            result = validator.validate_relay(relay)
-            st.session_state.validation_results.append(result)
+            # Update progress
+            progress = (i + 1) / len(relays)
+            progress_bar.progress(progress)
+            nickname = relay.get('nickname', 'Unknown')
+            fingerprint = relay.get('fingerprint', 'N/A')
+            status_text.text(f"🔍 Validating relay {i + 1}/{len(relays)}: {nickname}")
             
-            # Update progress every relay
-            current_count = len(st.session_state.validation_results)
-            valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
-            st.write(f"Processing relay {current_count}/{len(relays)}: {valid_count} valid so far")
+            with validation_details:
+                st.write(f"**Relay {i + 1}: {nickname}** (`{fingerprint[:16]}...`)")
+                
+                # Create columns for checklist
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    checklist_container = st.container()
+                
+                # Validate individual relay with step tracking
+                result = validator.validate_relay_with_steps(relay, checklist_container)
+                results.append(result)
+                
+                with col2:
+                    if result['valid']:
+                        st.success("✅ Valid")
+                    else:
+                        st.error("❌ Invalid")
+                
+                if i < len(relays) - 1:  # Don't add divider after last relay
+                    st.divider()
             
+            # Update live status display after validation
+            valid_count = sum(1 for r in results if r['valid'])
+            total_count = len(results)
+            live_status.info(f"📊 Live Status: {valid_count}/{total_count} valid ({(valid_count/total_count*100):.1f}%)")
+        
+        # Final update to session state
+        st.session_state.validation_results = results
+        
+        # Clear progress indicators
+        progress_container.empty()
+        
+        # Show completion message
+        total_relays = len(results)
+        valid_relays = sum(1 for r in results if r['valid'])
+        invalid_relays = total_relays - valid_relays
+        
+        st.success(f"✅ Validation complete! {valid_relays} valid, {invalid_relays} invalid out of {total_relays} relays")
+        
     except Exception as e:
-        st.error(f"Validation failed: {str(e)}")
+        st.error(f"❌ Validation failed: {str(e)}")
     finally:
         st.session_state.validation_in_progress = False
-
-def run_validation(relay_data=None):
-    """Start validation process"""
-    st.session_state.validation_in_progress = True
-    st.session_state.validation_results = []
-    
-    # Start the validation in a fragment
-    perform_validation(relay_data)
 
 
 
