@@ -156,124 +156,72 @@ def main():
             except Exception as e:
                 st.error(f"❌ Error reading file: {str(e)}")
     
-    # Results section (always visible)
+    # Create a persistent results container
     st.divider()
-    st.header("📊 Validation Results")
+    results_container = st.container()
     
-    # Show status and progress
-    if st.session_state.get('validation_in_progress', False):
-        st.info("Validation in progress...")
-        if st.session_state.validation_results and len(st.session_state.validation_results) > 0:
-            current_count = len(st.session_state.validation_results)
-            valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
-            st.success(f"Progress: {current_count} relays processed, {valid_count} valid")
-    
-    # Always show results content
-    if st.session_state.validation_results is None or len(st.session_state.validation_results) == 0:
-        if not st.session_state.get('validation_in_progress', False):
-            st.info("No validation results yet. Start validation above to see results here.")
-    else:
-        # Show the actual results
-        display_results_summary()
+    with results_container:
+        st.header("📊 Validation Results")
+        
+        # Show status and progress in a placeholder that doesn't clear
+        status_placeholder = st.empty()
+        results_placeholder = st.empty()
+        
+        with status_placeholder.container():
+            if st.session_state.get('validation_in_progress', False):
+                st.info("Validation in progress...")
+                if st.session_state.validation_results and len(st.session_state.validation_results) > 0:
+                    current_count = len(st.session_state.validation_results)
+                    valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
+                    st.success(f"Progress: {current_count} relays processed, {valid_count} valid")
+            else:
+                if st.session_state.validation_results is None or len(st.session_state.validation_results) == 0:
+                    st.info("No validation results yet. Start validation above to see results here.")
+        
+        # Results content in its own placeholder
+        with results_placeholder.container():
+            if st.session_state.validation_results and len(st.session_state.validation_results) > 0:
+                display_results_summary()
     
     # Export section (only show if results exist)
     if st.session_state.validation_results is not None and len(st.session_state.validation_results) > 0:
         st.divider()
         export_results()
 
-def run_validation(relay_data=None):
-    """Run AROI validation with progress tracking"""
-    st.session_state.validation_in_progress = True
-    
+@st.fragment
+def perform_validation(relay_data=None):
+    """Perform the actual validation work"""
     try:
         validator = AROIValidator()
         
-        # Create progress containers
-        progress_container = st.container()
-        with progress_container:
-            st.info("🚀 Starting validation process...")
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-        
-        # Fetch or use provided relay data
+        # Get relay data
         if relay_data is None:
-            status_text.text("📡 Fetching relay data from Onionoo...")
             relays = validator.fetch_relay_data()
-            st.success(f"✅ Fetched {len(relays)} relays from Onionoo")
         else:
             relays = relay_data
-            st.success(f"✅ Using {len(relays)} relays from uploaded file")
         
-        # Validate relays
-        status_text.text("🔍 Validating AROI proofs...")
-        results = []
-        
-        # Don't reset results to empty list - keep previous results visible
-        
-        # Create live status display at the top
-        live_status = st.empty()
-        
-        # Create container for detailed validation steps (collapsed by default)
-        validation_details = st.expander("Detailed Validation Steps", expanded=False)
-        
+        # Process each relay
         for i, relay in enumerate(relays):
-            # Update progress
-            progress = (i + 1) / len(relays)
-            progress_bar.progress(progress)
-            nickname = relay.get('nickname', 'Unknown')
-            fingerprint = relay.get('fingerprint', 'N/A')
-            status_text.text(f"🔍 Validating relay {i + 1}/{len(relays)}: {nickname}")
+            result = validator.validate_relay(relay)
+            st.session_state.validation_results.append(result)
             
-            with validation_details:
-                st.write(f"**Relay {i + 1}: {nickname}** (`{fingerprint[:16]}...`)")
-                
-                # Create columns for checklist
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    checklist_container = st.container()
-                
-                # Validate individual relay with step tracking (only once, inside dropdown)
-                result = validator.validate_relay_with_steps(relay, checklist_container)
-                results.append(result)
-                
-                # Update session state after each validation
-                st.session_state.validation_results = results.copy()
-                
-                with col2:
-                    if result['valid']:
-                        st.success("✅ Valid")
-                    else:
-                        st.error("❌ Invalid")
-                
-                if i < len(relays) - 1:  # Don't add divider after last relay
-                    st.divider()
+            # Update progress every relay
+            current_count = len(st.session_state.validation_results)
+            valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
+            st.write(f"Processing relay {current_count}/{len(relays)}: {valid_count} valid so far")
             
-            # Update live status display after validation
-            valid_count = sum(1 for r in results if r['valid'])
-            total_count = len(results)
-            live_status.info(f"📊 Live Status: {valid_count}/{total_count} valid ({(valid_count/total_count*100):.1f}%)")
-        
-        # Final update to session state
-        st.session_state.validation_results = results
-        
-        # Clear progress indicators
-        progress_container.empty()
-        
-        # Show completion message
-        total_relays = len(results)
-        valid_relays = sum(1 for r in results if r['valid'])
-        invalid_relays = total_relays - valid_relays
-        
-        st.success(f"✅ Validation complete! {valid_relays} valid, {invalid_relays} invalid out of {total_relays} relays")
-        
-        # Switch to results tab
-        st.rerun()
-        
     except Exception as e:
-        st.error(f"❌ Validation failed: {str(e)}")
+        st.error(f"Validation failed: {str(e)}")
     finally:
         st.session_state.validation_in_progress = False
+
+def run_validation(relay_data=None):
+    """Start validation process"""
+    st.session_state.validation_in_progress = True
+    st.session_state.validation_results = []
+    
+    # Start the validation in a fragment
+    perform_validation(relay_data)
 
 
 
