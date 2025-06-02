@@ -102,6 +102,9 @@ def run_validation(relay_data=None):
         # Initialize results in session state
         st.session_state.validation_results = []
         
+        # Create live status display
+        live_status = st.container()
+        
         # Create container for detailed validation steps
         validation_details = st.expander("Detailed Validation Steps", expanded=True)
         
@@ -134,6 +137,14 @@ def run_validation(relay_data=None):
                         st.success("✅ Valid")
                     else:
                         st.error("❌ Invalid")
+                
+                # Update live status display
+                with live_status:
+                    live_status.empty()
+                    if len(results) > 0:
+                        valid_count = sum(1 for r in results if r['valid'])
+                        total_count = len(results)
+                        live_status.info(f"Live Status: {valid_count}/{total_count} valid ({(valid_count/total_count*100):.1f}%)")
                 
                 if i < len(relays) - 1:  # Don't add divider after last relay
                     st.divider()
