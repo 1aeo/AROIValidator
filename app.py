@@ -218,6 +218,9 @@ def run_validation(relay_data=None):
         # Create live status display at the top
         live_status = st.empty()
         
+        # Create live results summary container
+        live_results_container = st.container()
+        
         # Create container for detailed validation steps (collapsed by default)
         validation_details = st.expander("Detailed Validation Steps", expanded=False)
         
@@ -255,6 +258,43 @@ def run_validation(relay_data=None):
             valid_count = sum(1 for r in results if r['valid'])
             total_count = len(results)
             live_status.info(f"📊 Live Status: {valid_count}/{total_count} valid ({(valid_count/total_count*100):.1f}%)")
+            
+            # Update live results summary
+            with live_results_container:
+                # Clear previous content
+                live_results_container.empty()
+                
+                # Show current results summary
+                st.subheader("📊 Live Results Summary")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Processed", total_count, f"of {len(relays)}")
+                with col2:
+                    st.metric("Valid AROI", valid_count, f"{(valid_count/total_count*100):.1f}%")
+                with col3:
+                    invalid_count = total_count - valid_count
+                    st.metric("Invalid AROI", invalid_count, f"{(invalid_count/total_count*100):.1f}%")
+                
+                # Show proof type breakdown if we have results
+                if results:
+                    dns_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'dns-rsa' and r['valid'])
+                    dns_rsa_total = sum(1 for r in results if r.get('proof_type') == 'dns-rsa')
+                    uri_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'uri-rsa' and r['valid'])
+                    uri_rsa_total = sum(1 for r in results if r.get('proof_type') == 'uri-rsa')
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if dns_rsa_total > 0:
+                            dns_rate = (dns_rsa_valid / dns_rsa_total) * 100
+                            color = "🟢" if dns_rate >= 80 else "🟡" if dns_rate >= 50 else "🔴"
+                            st.write(f"{color} DNS-RSA: {dns_rsa_valid}/{dns_rsa_total} ({dns_rate:.1f}%)")
+                    
+                    with col2:
+                        if uri_rsa_total > 0:
+                            uri_rate = (uri_rsa_valid / uri_rsa_total) * 100
+                            color = "🟢" if uri_rate >= 80 else "🟡" if uri_rate >= 50 else "🔴"
+                            st.write(f"{color} URI-RSA: {uri_rsa_valid}/{uri_rsa_total} ({uri_rate:.1f}%)")
         
         # Final update to session state
         st.session_state.validation_results = results
