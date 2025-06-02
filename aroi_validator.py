@@ -249,6 +249,138 @@ class AROIValidator:
             "error": error_msg
         }
     
+    def validate_relay_with_steps(self, relay: Dict[str, Any], ui_container) -> Dict[str, Any]:
+        """
+        Validate AROI proof for a single relay with detailed step tracking for UI
+        
+        Args:
+            relay: Relay dictionary with fingerprint, nickname, and contact
+            ui_container: Streamlit container for displaying step-by-step progress
+            
+        Returns:
+            Dictionary with validation results and error information
+        """
+        fingerprint = relay.get("fingerprint", "")
+        contact = relay.get("contact", "")
+        nickname = relay.get("nickname", "")
+        
+        # Step 1: Parse contact information
+        with ui_container:
+            ui_container.write("**Step 1:** Parsing contact information")
+            aroi_info = self.parse_aroi_tokens(contact)
+            
+            if contact:
+                ui_container.code(f"Contact: {contact[:100]}{'...' if len(contact) > 100 else ''}")
+            else:
+                ui_container.write("❌ No contact information found")
+            
+            # Show parsed tokens
+            if aroi_info:
+                parsed_display = []
+                for key, value in aroi_info.items():
+                    parsed_display.append(f"{key}: {value}")
+                ui_container.write(f"✅ Parsed tokens: {', '.join(parsed_display)}")
+            else:
+                ui_container.write("❌ No AROI tokens found")
+        
+        # Step 2: Check required fields
+        with ui_container:
+            ui_container.write("**Step 2:** Checking required AROI fields")
+            missing_fields = [field for field in ("url", "proof", "ciissversion") if field not in aroi_info]
+            
+            for field in ("url", "proof", "ciissversion"):
+                if field in aroi_info:
+                    ui_container.write(f"✅ {field}: {aroi_info[field]}")
+                else:
+                    ui_container.write(f"❌ {field}: Missing")
+            
+            if missing_fields:
+                error_msg = f"Missing AROI fields: {', '.join(missing_fields)}."
+                ui_container.write(f"❌ Validation failed: {error_msg}")
+                return {
+                    "fingerprint": fingerprint,
+                    "nickname": nickname,
+                    "domain": aroi_info.get("url", None),
+                    "proof_type": aroi_info.get("proof", None),
+                    "ciissversion": aroi_info.get("ciissversion", None),
+                    "valid": False,
+                    "error": error_msg
+                }
+        
+        # Step 3: Check version support
+        with ui_container:
+            ui_container.write("**Step 3:** Checking version support")
+            version = aroi_info["ciissversion"]
+            
+            if version == "2":
+                ui_container.write(f"✅ Supported version: {version}")
+            else:
+                error_msg = f"Unsupported ciissversion: {version}"
+                ui_container.write(f"❌ {error_msg}")
+                return {
+                    "fingerprint": fingerprint,
+                    "nickname": nickname,
+                    "domain": aroi_info["url"],
+                    "proof_type": aroi_info["proof"],
+                    "ciissversion": version,
+                    "valid": False,
+                    "error": error_msg
+                }
+        
+        # Step 4: Normalize domain
+        with ui_container:
+            ui_container.write("**Step 4:** Normalizing domain")
+            original_url = aroi_info["url"]
+            domain = self.normalize_domain(original_url)
+            ui_container.write(f"Original URL: {original_url}")
+            ui_container.write(f"✅ Normalized domain: {domain}")
+        
+        proof_type = aroi_info["proof"]
+        
+        # Step 5: Validate proof
+        with ui_container:
+            ui_container.write(f"**Step 5:** Validating {proof_type} proof")
+            
+            if proof_type == "dns-rsa":
+                record_name = f"{fingerprint.lower()}.{domain}"
+                ui_container.write(f"Looking up TXT record: {record_name}")
+                ui_container.write(f"Expected value: 'we-run-this-tor-relay'")
+                
+                valid, error_msg = self.validate_dns_rsa_proof(fingerprint, domain)
+                
+                if valid:
+                    ui_container.write("✅ DNS-RSA proof validation successful")
+                    ui_container.write("✅ DNSSEC validation passed")
+                else:
+                    ui_container.write(f"❌ DNS-RSA proof validation failed: {error_msg}")
+                    
+            elif proof_type == "uri-rsa":
+                proof_url = f"https://{domain}/.well-known/tor-relay/rsa-fingerprint.txt"
+                ui_container.write(f"Checking URL: {proof_url}")
+                ui_container.write(f"Looking for fingerprint: {fingerprint.upper()}")
+                
+                valid, error_msg = self.validate_uri_rsa_proof(fingerprint, domain)
+                
+                if valid:
+                    ui_container.write("✅ URI-RSA proof validation successful")
+                else:
+                    ui_container.write(f"❌ URI-RSA proof validation failed: {error_msg}")
+                    
+            else:
+                valid = False
+                error_msg = f"Unsupported proof type: '{proof_type}'."
+                ui_container.write(f"❌ {error_msg}")
+        
+        return {
+            "fingerprint": fingerprint,
+            "nickname": nickname,
+            "domain": domain,
+            "proof_type": proof_type,
+            "ciissversion": version,
+            "valid": valid,
+            "error": error_msg
+        }
+    
     def validate_relays(self, relays: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Validate AROI proofs for multiple relays

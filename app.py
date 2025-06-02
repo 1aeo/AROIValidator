@@ -99,15 +99,38 @@ def run_validation(relay_data=None):
         status_text.text("🔍 Validating AROI proofs...")
         results = []
         
+        # Create container for detailed validation steps
+        validation_details = st.expander("Detailed Validation Steps", expanded=True)
+        
         for i, relay in enumerate(relays):
             # Update progress
             progress = (i + 1) / len(relays)
             progress_bar.progress(progress)
-            status_text.text(f"🔍 Validating relay {i + 1}/{len(relays)}: {relay.get('nickname', 'Unknown')}")
+            nickname = relay.get('nickname', 'Unknown')
+            fingerprint = relay.get('fingerprint', 'N/A')
+            status_text.text(f"🔍 Validating relay {i + 1}/{len(relays)}: {nickname}")
             
-            # Validate individual relay
-            result = validator.validate_relay(relay)
-            results.append(result)
+            with validation_details:
+                st.write(f"**Relay {i + 1}: {nickname}** (`{fingerprint[:16]}...`)")
+                
+                # Create columns for checklist
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    checklist_container = st.container()
+                
+                # Validate individual relay with step tracking
+                result = validator.validate_relay_with_steps(relay, checklist_container)
+                results.append(result)
+                
+                with col2:
+                    if result['valid']:
+                        st.success("✅ Valid")
+                    else:
+                        st.error("❌ Invalid")
+                
+                if i < len(relays) - 1:  # Don't add divider after last relay
+                    st.divider()
         
         # Store results in session state
         st.session_state.validation_results = results
