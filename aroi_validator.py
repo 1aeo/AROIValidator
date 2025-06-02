@@ -270,7 +270,16 @@ class AROIValidator:
             aroi_info = self.parse_aroi_tokens(contact)
             
             if contact:
-                ui_container.code(f"Contact: {contact[:100]}{'...' if len(contact) > 100 else ''}")
+                # Display full contact info in an expandable text area
+                with ui_container.expander("📄 View Full Contact Information", expanded=False):
+                    ui_container.text_area(
+                        "Complete Contact Field:",
+                        value=contact,
+                        height=150,
+                        disabled=True,
+                        key=f"contact_{fingerprint[:8]}"
+                    )
+                ui_container.write(f"Contact length: {len(contact)} characters")
             else:
                 ui_container.write("❌ No contact information found")
             
