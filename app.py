@@ -306,6 +306,9 @@ def run_validation(relay_data=None):
                 if i < len(relays) - 1:  # Don't add divider after last relay
                     st.divider()
             
+            # Update session state with current results before updating UI
+            st.session_state.validation_results = results.copy()
+            
             # Update live results summary in placeholder
             valid_count = sum(1 for r in results if r['valid'])
             total_count = len(results)
@@ -353,7 +356,10 @@ def run_validation(relay_data=None):
         valid_relays = sum(1 for r in results if r['valid'])
         invalid_relays = total_relays - valid_relays
         
-        st.success(f"✅ Validation complete! {valid_relays} valid, {invalid_relays} invalid out of {total_relays} relays")
+        if st.session_state.get('validation_stopped', False):
+            st.warning(f"⏹️ Validation stopped! {valid_relays} valid, {invalid_relays} invalid out of {total_relays} relays processed")
+        else:
+            st.success(f"✅ Validation complete! {valid_relays} valid, {invalid_relays} invalid out of {total_relays} relays")
         
     except Exception as e:
         st.error(f"❌ Validation failed: {str(e)}")
