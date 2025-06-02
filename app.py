@@ -218,8 +218,8 @@ def run_validation(relay_data=None):
         # Create live status display at the top
         live_status = st.empty()
         
-        # Create live results summary container
-        live_results_container = st.container()
+        # Create live results summary placeholder
+        live_results_placeholder = st.empty()
         
         # Create container for detailed validation steps (collapsed by default)
         validation_details = st.expander("Detailed Validation Steps", expanded=False)
@@ -259,11 +259,8 @@ def run_validation(relay_data=None):
             total_count = len(results)
             live_status.info(f"📊 Live Status: {valid_count}/{total_count} valid ({(valid_count/total_count*100):.1f}%)")
             
-            # Update live results summary
-            with live_results_container:
-                # Clear previous content
-                live_results_container.empty()
-                
+            # Update live results summary in placeholder
+            with live_results_placeholder.container():
                 # Show current results summary
                 st.subheader("📊 Live Results Summary")
                 
