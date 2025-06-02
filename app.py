@@ -99,8 +99,7 @@ def run_validation(relay_data=None):
         status_text.text("🔍 Validating AROI proofs...")
         results = []
         
-        # Initialize results in session state
-        st.session_state.validation_results = []
+        # Don't reset results to empty list - keep previous results visible
         
         # Create live status display at the top
         live_status = st.empty()
@@ -174,18 +173,23 @@ def display_results():
     # Show status during validation
     if st.session_state.get('validation_in_progress', False):
         st.info("Validation in progress...")
+        # Show current progress if any results exist
+        if st.session_state.validation_results and len(st.session_state.validation_results) > 0:
+            current_count = len(st.session_state.validation_results)
+            valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
+            st.write(f"Progress: {current_count} relays processed, {valid_count} valid")
     
     if st.session_state.validation_results is None:
-        if st.session_state.get('validation_in_progress', False):
-            st.info("Starting validation...")
-        else:
-            st.info("No validation results yet. Start validation above to see results here.")
+        st.info("No validation results yet. Start validation above to see results here.")
         return
     
     results = st.session_state.validation_results
     
     if not results:
-        st.info("Waiting for validation results...")
+        if st.session_state.get('validation_in_progress', False):
+            st.info("Starting validation...")
+        else:
+            st.info("No validation results available.")
         return
     
     # Summary statistics
