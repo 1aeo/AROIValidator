@@ -136,8 +136,7 @@ def main():
                 st.session_state.validation_stopped = True
                 if hasattr(st.session_state, 'validation_started'):
                     del st.session_state.validation_started
-                # Keep existing results - don't clear them
-                st.rerun()
+                # Don't rerun - let the validation loop detect the stop
             
     else:  # Upload JSON file
         st.info("Upload a JSON file containing relay data with fingerprint, nickname, and contact fields")
@@ -183,8 +182,7 @@ def main():
                         st.session_state.validation_stopped = True
                         if hasattr(st.session_state, 'validation_started'):
                             del st.session_state.validation_started
-                        # Keep existing results - don't clear them
-                        st.rerun()
+                        # Don't rerun - let the validation loop detect the stop
                     
             except json.JSONDecodeError:
                 st.error("❌ Invalid JSON file. Please check the file format.")
