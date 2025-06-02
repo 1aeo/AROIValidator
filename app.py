@@ -102,8 +102,8 @@ def run_validation(relay_data=None):
         # Initialize results in session state
         st.session_state.validation_results = []
         
-        # Create live status display
-        live_status = st.container()
+        # Create live status display at the top
+        live_status = st.empty()
         
         # Create container for detailed validation steps (collapsed by default)
         validation_details = st.expander("Detailed Validation Steps", expanded=False)
@@ -116,6 +116,18 @@ def run_validation(relay_data=None):
             fingerprint = relay.get('fingerprint', 'N/A')
             status_text.text(f"🔍 Validating relay {i + 1}/{len(relays)}: {nickname}")
             
+            # Validate individual relay with step tracking
+            result = validator.validate_relay_with_steps(relay, st.container())
+            results.append(result)
+            
+            # Update session state after each validation
+            st.session_state.validation_results = results.copy()
+            
+            # Update live status display
+            valid_count = sum(1 for r in results if r['valid'])
+            total_count = len(results)
+            live_status.info(f"📊 Live Status: {valid_count}/{total_count} valid ({(valid_count/total_count*100):.1f}%)")
+            
             with validation_details:
                 st.write(f"**Relay {i + 1}: {nickname}** (`{fingerprint[:16]}...`)")
                 
@@ -124,27 +136,14 @@ def run_validation(relay_data=None):
                 
                 with col1:
                     checklist_container = st.container()
-                
-                # Validate individual relay with step tracking
-                result = validator.validate_relay_with_steps(relay, checklist_container)
-                results.append(result)
-                
-                # Update session state after each validation
-                st.session_state.validation_results = results.copy()
+                    # Re-run validation for detailed display
+                    validator.validate_relay_with_steps(relay, checklist_container)
                 
                 with col2:
                     if result['valid']:
                         st.success("✅ Valid")
                     else:
                         st.error("❌ Invalid")
-                
-                # Update live status display
-                with live_status:
-                    live_status.empty()
-                    if len(results) > 0:
-                        valid_count = sum(1 for r in results if r['valid'])
-                        total_count = len(results)
-                        live_status.info(f"Live Status: {valid_count}/{total_count} valid ({(valid_count/total_count*100):.1f}%)")
                 
                 if i < len(relays) - 1:  # Don't add divider after last relay
                     st.divider()
