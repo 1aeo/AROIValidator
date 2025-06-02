@@ -127,14 +127,16 @@ def main():
             if st.button("🚀 Start Validation", type="primary", disabled=st.session_state.validation_in_progress):
                 st.session_state.validation_in_progress = True
                 st.session_state.validation_results = []  # Clear previous results on new start
+                st.session_state.validation_stopped = False  # Reset stopped flag
                 st.rerun()
         
         with col2:
             if st.button("⏹️ Stop Validation", type="secondary", disabled=not st.session_state.validation_in_progress):
                 st.session_state.validation_in_progress = False
+                st.session_state.validation_stopped = True
                 if hasattr(st.session_state, 'validation_started'):
                     del st.session_state.validation_started
-                # Don't clear results - keep what we've processed so far
+                # Keep existing results - don't clear them
                 st.rerun()
             
     else:  # Upload JSON file
@@ -172,14 +174,16 @@ def main():
                     if st.button("🚀 Start Validation", type="primary", disabled=st.session_state.validation_in_progress, key="start_upload"):
                         st.session_state.validation_in_progress = True
                         st.session_state.validation_results = []  # Clear previous results on new start
+                        st.session_state.validation_stopped = False  # Reset stopped flag
                         st.rerun()
                 
                 with col2:
                     if st.button("⏹️ Stop Validation", type="secondary", disabled=not st.session_state.validation_in_progress, key="stop_upload"):
                         st.session_state.validation_in_progress = False
+                        st.session_state.validation_stopped = True
                         if hasattr(st.session_state, 'validation_started'):
                             del st.session_state.validation_started
-                        # Don't clear results - keep what we've processed so far
+                        # Keep existing results - don't clear them
                         st.rerun()
                     
             except json.JSONDecodeError:
@@ -213,6 +217,12 @@ def main():
                     current_count = len(st.session_state.validation_results)
                     valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
                     st.success(f"Progress: {current_count} relays processed, {valid_count} valid")
+            elif st.session_state.get('validation_stopped', False):
+                st.warning("Validation stopped by user")
+                if st.session_state.validation_results and len(st.session_state.validation_results) > 0:
+                    current_count = len(st.session_state.validation_results)
+                    valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
+                    st.info(f"Partial results: {current_count} relays processed, {valid_count} valid")
             else:
                 if st.session_state.validation_results is None or len(st.session_state.validation_results) == 0:
                     st.info("No validation results yet. Start validation above to see results here.")
