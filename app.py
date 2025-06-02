@@ -169,11 +169,23 @@ def run_validation(relay_data=None):
 
 def display_results():
     """Display validation results in an interactive table"""
+    # Auto-refresh during validation
+    if st.session_state.get('validation_in_progress', False):
+        st.info("🔄 Validation in progress... Results updating live")
+        # Auto-refresh every 2 seconds during validation
+        import time
+        time.sleep(0.1)  # Small delay to allow updates
+        st.rerun()
+    
     if st.session_state.validation_results is None:
         st.info("👆 No validation results yet. Use the 'Validate' tab to start validation.")
         return
     
     results = st.session_state.validation_results
+    
+    if not results:
+        st.info("⏳ Waiting for validation results...")
+        return
     
     # Summary statistics
     st.header("📊 Validation Summary")
