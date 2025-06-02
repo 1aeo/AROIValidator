@@ -137,9 +137,9 @@ class AROIValidator:
         """
         proof_url = f"https://{domain}/.well-known/tor-relay/rsa-fingerprint.txt"
         
+        # Try with SSL verification first
         try:
-            # Fetch without following redirects automatically
-            resp = requests.get(proof_url, timeout=10, allow_redirects=False)
+            resp = requests.get(proof_url, timeout=10, allow_redirects=False, verify=True)
             
             # If redirect, ensure it stays on the same domain
             if 300 <= resp.status_code < 400:
@@ -147,10 +147,31 @@ class AROIValidator:
                 if not redirect_loc or domain not in redirect_loc:
                     return False, f"Redirect to disallowed domain: '{redirect_loc}'."
                 
-                resp = requests.get(redirect_loc, timeout=10, allow_redirects=False)
+                resp = requests.get(redirect_loc, timeout=10, allow_redirects=False, verify=True)
             
             resp.raise_for_status()
             
+        except requests.exceptions.SSLError as ssl_error:
+            # If SSL verification fails, try without verification but note it in error
+            try:
+                resp = requests.get(proof_url, timeout=10, allow_redirects=False, verify=False)
+                
+                # If redirect, ensure it stays on the same domain
+                if 300 <= resp.status_code < 400:
+                    redirect_loc = resp.headers.get("Location", "")
+                    if not redirect_loc or domain not in redirect_loc:
+                        return False, f"Redirect to disallowed domain: '{redirect_loc}'."
+                    
+                    resp = requests.get(redirect_loc, timeout=10, allow_redirects=False, verify=False)
+                
+                resp.raise_for_status()
+                
+                # Note SSL issue but continue validation
+                ssl_warning = f" (SSL certificate verification failed: {str(ssl_error)[:100]}...)"
+                
+            except requests.RequestException as e:
+                return False, f"HTTP exception after SSL retry: {e}"
+                
         except requests.RequestException as e:
             return False, f"HTTP exception: {e}"
         
@@ -164,6 +185,10 @@ class AROIValidator:
         
         if not found:
             return False, f"Fingerprint '{relay_fp}' not found in .well-known file at '{proof_url}'."
+        
+        # Return success, with SSL warning if applicable
+        if 'ssl_warning' in locals():
+            return True, f"Valid (with SSL warning){ssl_warning}"
         
         return True, None
     
