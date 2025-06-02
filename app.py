@@ -133,6 +133,7 @@ def main():
                 st.session_state.validation_in_progress = False
                 if hasattr(st.session_state, 'validation_started'):
                     del st.session_state.validation_started
+                # Don't clear results - keep what we've processed so far
                 st.rerun()
             
     else:  # Upload JSON file
@@ -176,6 +177,7 @@ def main():
                         st.session_state.validation_in_progress = False
                         if hasattr(st.session_state, 'validation_started'):
                             del st.session_state.validation_started
+                        # Don't clear results - keep what we've processed so far
                         st.rerun()
                     
             except json.JSONDecodeError:
@@ -226,6 +228,10 @@ def main():
 def run_validation(relay_data=None):
     """Run AROI validation with progress tracking"""
     st.session_state.validation_in_progress = True
+    
+    # Only clear results if starting fresh, not if resuming
+    if st.session_state.validation_results is None:
+        st.session_state.validation_results = []
     
     try:
         validator = AROIValidator()
