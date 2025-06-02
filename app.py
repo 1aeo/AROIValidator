@@ -120,8 +120,14 @@ def main():
     if data_source == "Fetch from Onionoo API":
         st.info("This will fetch relay data from https://onionoo.torproject.org/details")
         
-        if st.button("🔄 Fetch and Validate Relays", disabled=st.session_state.validation_in_progress):
-            run_validation()
+        # Dynamic button that changes based on validation state
+        if st.session_state.validation_in_progress:
+            if st.button("⏹️ Stop Validation", type="secondary"):
+                st.session_state.validation_in_progress = False
+                st.rerun()
+        else:
+            if st.button("🚀 Start Validation", type="primary"):
+                run_validation()
             
     else:  # Upload JSON file
         st.info("Upload a JSON file containing relay data with fingerprint, nickname, and contact fields")
@@ -148,8 +154,14 @@ def main():
                 
                 st.success(f"✅ Loaded {len(relays)} relays from file")
                 
-                if st.button("🔍 Validate Uploaded Data", disabled=st.session_state.validation_in_progress):
-                    run_validation(relays)
+                # Dynamic button for uploaded data
+                if st.session_state.validation_in_progress:
+                    if st.button("⏹️ Stop Validation", type="secondary", key="stop_upload"):
+                        st.session_state.validation_in_progress = False
+                        st.rerun()
+                else:
+                    if st.button("🚀 Start Validation", type="primary", key="start_upload"):
+                        run_validation(relays)
                     
             except json.JSONDecodeError:
                 st.error("❌ Invalid JSON file. Please check the file format.")
