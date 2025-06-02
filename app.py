@@ -243,6 +243,11 @@ def run_validation(relay_data=None):
         validation_details = st.expander("Detailed Validation Steps", expanded=False)
         
         for i, relay in enumerate(relays):
+            # Check if validation was stopped
+            if not st.session_state.validation_in_progress:
+                st.warning("⏹️ Validation stopped by user")
+                break
+                
             # Update progress
             progress = (i + 1) / len(relays)
             progress_bar.progress(progress)
