@@ -127,8 +127,6 @@ def main():
                 st.rerun()
         else:
             if st.button("🚀 Start Validation", type="primary"):
-                st.session_state.validation_in_progress = True
-                st.rerun()
                 run_validation()
             
     else:  # Upload JSON file
@@ -163,8 +161,6 @@ def main():
                         st.rerun()
                 else:
                     if st.button("🚀 Start Validation", type="primary", key="start_upload"):
-                        st.session_state.validation_in_progress = True
-                        st.rerun()
                         run_validation(relays)
                     
             except json.JSONDecodeError:
