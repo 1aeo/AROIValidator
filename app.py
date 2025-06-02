@@ -14,13 +14,6 @@ def main():
     if 'validation_in_progress' not in st.session_state:
         st.session_state.validation_in_progress = False
     
-    # Add refresh button for live updates
-    if st.session_state.get('validation_in_progress', False):
-        col1, col2 = st.columns([3, 1])
-        with col2:
-            if st.button("🔄 Refresh Results", help="Click to update results during validation"):
-                st.rerun()
-    
     # Create tabs
     tab1, tab2, tab3 = st.tabs(["🚀 Validate", "📊 Results", "📁 Export"])
     
@@ -176,9 +169,14 @@ def run_validation(relay_data=None):
 
 def display_results():
     """Display validation results in an interactive table"""
-    # Check if validation is in progress
+    # Add refresh button within the Results tab
     if st.session_state.get('validation_in_progress', False):
-        st.info("Validation in progress... Click 'Refresh Results' button above to see latest updates")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.info("Validation in progress...")
+        with col2:
+            if st.button("🔄 Refresh", help="Click to update results during validation"):
+                st.rerun()
     
     if st.session_state.validation_results is None:
         if st.session_state.get('validation_in_progress', False):
