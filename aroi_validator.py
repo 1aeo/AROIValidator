@@ -5,7 +5,11 @@ import dns.message
 import dns.flags
 import dns.rdatatype
 import json
+import urllib3
 from typing import List, Dict, Any, Optional
+
+# Disable SSL warnings for domains with certificate issues
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class AROIValidator:
     """Validator for Tor relay AROI (Autonomous Relay Operator Identity) proofs"""
@@ -151,10 +155,20 @@ class AROIValidator:
             
             resp.raise_for_status()
             
-        except requests.exceptions.SSLError as ssl_error:
+        except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as ssl_error:
             # If SSL verification fails, try without verification but note it in error
             try:
-                resp = requests.get(proof_url, timeout=10, allow_redirects=False, verify=False)
+                # Use a more permissive session for problematic SSL configurations
+                session = requests.Session()
+                session.verify = False
+                
+                # Set user agent and headers to improve compatibility
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (compatible; AROI-Validator/1.0)',
+                    'Accept': 'text/plain, */*'
+                }
+                
+                resp = session.get(proof_url, timeout=10, allow_redirects=False, headers=headers)
                 
                 # If redirect, ensure it stays on the same domain
                 if 300 <= resp.status_code < 400:
@@ -162,15 +176,15 @@ class AROIValidator:
                     if not redirect_loc or domain not in redirect_loc:
                         return False, f"Redirect to disallowed domain: '{redirect_loc}'."
                     
-                    resp = requests.get(redirect_loc, timeout=10, allow_redirects=False, verify=False)
+                    resp = session.get(redirect_loc, timeout=10, allow_redirects=False, headers=headers)
                 
                 resp.raise_for_status()
                 
                 # Note SSL issue but continue validation
-                ssl_warning = f" (SSL certificate verification failed: {str(ssl_error)[:100]}...)"
+                ssl_warning = f" (SSL/TLS issue bypassed: {str(ssl_error)[:80]}...)"
                 
             except requests.RequestException as e:
-                return False, f"HTTP exception after SSL retry: {e}"
+                return False, f"Connection failed even without SSL verification: {str(e)[:100]}..."
                 
         except requests.RequestException as e:
             return False, f"HTTP exception: {e}"
@@ -187,7 +201,8 @@ class AROIValidator:
             return False, f"Fingerprint '{relay_fp}' not found in .well-known file at '{proof_url}'."
         
         # Return success, with SSL warning if applicable
-        if 'ssl_warning' in locals():
+        ssl_warning = locals().get('ssl_warning', '')
+        if ssl_warning:
             return True, f"Valid (with SSL warning){ssl_warning}"
         
         return True, None
