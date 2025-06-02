@@ -105,8 +105,8 @@ def run_validation(relay_data=None):
         # Create live status display
         live_status = st.container()
         
-        # Create container for detailed validation steps
-        validation_details = st.expander("Detailed Validation Steps", expanded=True)
+        # Create container for detailed validation steps (collapsed by default)
+        validation_details = st.expander("Detailed Validation Steps", expanded=False)
         
         for i, relay in enumerate(relays):
             # Update progress
