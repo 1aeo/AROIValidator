@@ -176,6 +176,79 @@ def display_results():
     with col3:
         st.metric("Invalid AROI", invalid_relays, delta=f"{(invalid_relays/total_relays*100):.1f}%")
     
+    # Color-coded validation status summary
+    st.subheader("🎨 Color-Coded Status Overview")
+    
+    # Calculate validation statistics by categories
+    dns_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'dns-rsa' and r['valid'])
+    dns_rsa_total = sum(1 for r in results if r.get('proof_type') == 'dns-rsa')
+    uri_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'uri-rsa' and r['valid'])
+    uri_rsa_total = sum(1 for r in results if r.get('proof_type') == 'uri-rsa')
+    missing_fields = sum(1 for r in results if 'Missing AROI fields' in str(r.get('error', '')))
+    unsupported_version = sum(1 for r in results if 'Unsupported ciissversion' in str(r.get('error', '')))
+    unsupported_proof = sum(1 for r in results if 'Unsupported proof type' in str(r.get('error', '')))
+    
+    # Create visual status summary with color coding
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Validation by Proof Type:**")
+        
+        # DNS-RSA validation
+        if dns_rsa_total > 0:
+            dns_success_rate = (dns_rsa_valid / dns_rsa_total) * 100
+            if dns_success_rate >= 80:
+                color = "🟢"
+            elif dns_success_rate >= 50:
+                color = "🟡"
+            else:
+                color = "🔴"
+            st.write(f"{color} DNS-RSA: {dns_rsa_valid}/{dns_rsa_total} ({dns_success_rate:.1f}%)")
+        
+        # URI-RSA validation
+        if uri_rsa_total > 0:
+            uri_success_rate = (uri_rsa_valid / uri_rsa_total) * 100
+            if uri_success_rate >= 80:
+                color = "🟢"
+            elif uri_success_rate >= 50:
+                color = "🟡"
+            else:
+                color = "🔴"
+            st.write(f"{color} URI-RSA: {uri_rsa_valid}/{uri_rsa_total} ({uri_success_rate:.1f}%)")
+    
+    with col2:
+        st.write("**Common Issues:**")
+        
+        if missing_fields > 0:
+            st.write(f"🔴 Missing Fields: {missing_fields} relays")
+        
+        if unsupported_version > 0:
+            st.write(f"🟠 Unsupported Version: {unsupported_version} relays")
+        
+        if unsupported_proof > 0:
+            st.write(f"🟠 Unsupported Proof Type: {unsupported_proof} relays")
+        
+        if missing_fields == 0 and unsupported_version == 0 and unsupported_proof == 0:
+            st.write("🟢 No common configuration issues found")
+    
+    # Overall health indicator
+    overall_success_rate = (valid_relays / total_relays) * 100 if total_relays > 0 else 0
+    
+    if overall_success_rate >= 80:
+        health_color = "🟢"
+        health_status = "Excellent"
+    elif overall_success_rate >= 60:
+        health_color = "🟡"
+        health_status = "Good"
+    elif overall_success_rate >= 40:
+        health_color = "🟠"
+        health_status = "Fair"
+    else:
+        health_color = "🔴"
+        health_status = "Poor"
+    
+    st.info(f"{health_color} **Overall Validation Health: {health_status}** ({overall_success_rate:.1f}% success rate)")
+    
     # Filters
     st.header("🔍 Filter Results")
     
