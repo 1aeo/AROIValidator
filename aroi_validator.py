@@ -404,7 +404,11 @@ class AROIValidator:
                 valid, error_msg = self.validate_uri_rsa_proof(fingerprint, domain)
                 
                 if valid:
-                    ui_container.write("✅ URI-RSA proof validation successful")
+                    if error_msg and "SSL" in error_msg:
+                        ui_container.write("✅ URI-RSA proof validation successful")
+                        ui_container.write(f"⚠️ SSL Warning: {error_msg}")
+                    else:
+                        ui_container.write("✅ URI-RSA proof validation successful")
                 else:
                     ui_container.write(f"❌ URI-RSA proof validation failed: {error_msg}")
                     
