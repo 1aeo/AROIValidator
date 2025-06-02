@@ -99,6 +99,9 @@ def run_validation(relay_data=None):
         status_text.text("🔍 Validating AROI proofs...")
         results = []
         
+        # Initialize results in session state
+        st.session_state.validation_results = []
+        
         # Create container for detailed validation steps
         validation_details = st.expander("Detailed Validation Steps", expanded=True)
         
@@ -123,6 +126,9 @@ def run_validation(relay_data=None):
                 result = validator.validate_relay_with_steps(relay, checklist_container)
                 results.append(result)
                 
+                # Update session state after each validation
+                st.session_state.validation_results = results.copy()
+                
                 with col2:
                     if result['valid']:
                         st.success("✅ Valid")
@@ -132,7 +138,7 @@ def run_validation(relay_data=None):
                 if i < len(relays) - 1:  # Don't add divider after last relay
                     st.divider()
         
-        # Store results in session state
+        # Final update to session state
         st.session_state.validation_results = results
         
         # Clear progress indicators
