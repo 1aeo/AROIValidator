@@ -204,9 +204,6 @@ def run_validation(relay_data=None):
     """Run AROI validation with progress tracking"""
     st.session_state.validation_in_progress = True
     
-    # Force immediate UI update to show the stop button
-    st.rerun()
-    
     try:
         validator = AROIValidator()
         
