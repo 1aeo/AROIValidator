@@ -254,12 +254,9 @@ def run_validation(relay_data=None):
                 if i < len(relays) - 1:  # Don't add divider after last relay
                     st.divider()
             
-            # Update live status display after validation
+            # Update live results summary in placeholder
             valid_count = sum(1 for r in results if r['valid'])
             total_count = len(results)
-            live_status.info(f"📊 Live Status: {valid_count}/{total_count} valid ({(valid_count/total_count*100):.1f}%)")
-            
-            # Update live results summary in placeholder
             with live_results_placeholder.container():
                 # Show current results summary
                 st.subheader("📊 Live Results Summary")
