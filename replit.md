@@ -32,6 +32,10 @@ A comprehensive Tor relay AROI (Autonomous Relay Operator Identity) validation s
 - **2025-06-27**: Separated interactive validation logic into app_interactive.py
 - **2025-06-27**: Updated workflow configuration to use new CLI system
 - **2025-06-27**: Created comprehensive README.md with usage examples and integration guides
+- **2025-06-27**: Migration to Replit environment completed with automated setup script
+- **2025-06-27**: Added setup.py for one-command environment configuration and dependency installation
+- **2025-06-27**: Created Streamlit configuration for proper deployment on port 5000
+- **2025-06-27**: Added run.sh helper script for quick application startup
 
 ## User Preferences
 - Prefers command line flexibility for different operational scenarios
