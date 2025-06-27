@@ -8,14 +8,16 @@ A comprehensive Tor relay AROI (Autonomous Relay Operator Identity) validation s
 Run the setup script to automatically configure everything:
 
 ```bash
-python setup.py
+python3 setup.py
 ```
 
 This will:
-- Install all required dependencies (streamlit, dnspython, pandas, requests, urllib3)
+- Install all required dependencies using Replit's package manager (uv)
 - Create Streamlit configuration for proper deployment
 - Verify project structure
 - Create helper scripts
+
+**Note**: The setup script uses `uv` (Replit's package manager) which works seamlessly in the Replit environment.
 
 ### Manual Setup
 If you prefer manual setup:

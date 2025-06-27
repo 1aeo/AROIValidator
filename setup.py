@@ -42,13 +42,24 @@ def install_dependencies():
     
     print("Installing Python dependencies...")
     try:
-        # Use uv if available (Replit's package manager)
-        subprocess.run(["uv", "add"] + dependencies, check=True)
+        # Use uv (Replit's package manager)
+        result = subprocess.run(["uv", "add"] + dependencies, check=True, capture_output=True, text=True)
         print("✓ Installed dependencies using uv")
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        # Fallback to pip
-        subprocess.run([sys.executable, "-m", "pip", "install"] + dependencies, check=True)
-        print("✓ Installed dependencies using pip")
+        print(f"Output: {result.stdout}")
+    except FileNotFoundError:
+        print("❌ uv not found. Please install dependencies manually using:")
+        print("   In Replit: Use the Package Manager in the sidebar")
+        print("   Or run: uv add streamlit dnspython pandas requests urllib3")
+        return False
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to install dependencies with uv: {e}")
+        print("Error output:", e.stderr if hasattr(e, 'stderr') else '')
+        print("\nPlease install dependencies manually using:")
+        print("   In Replit: Use the Package Manager in the sidebar")
+        print("   Or run: uv add streamlit dnspython pandas requests urllib3")
+        return False
+    
+    return True
 
 def create_run_script():
     """Create a simple run script for the application"""
@@ -98,11 +109,13 @@ def main():
         sys.exit(1)
     
     # Install dependencies
-    try:
-        install_dependencies()
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install dependencies: {e}")
-        sys.exit(1)
+    if not install_dependencies():
+        print("❌ Dependency installation failed")
+        print("\nYou can still use the project if dependencies are already installed.")
+        print("To check if dependencies are available, try running:")
+        print("  python aroi_cli.py interactive")
+        print()
+        # Don't exit - let user proceed if deps are already there
     
     # Create configuration
     create_streamlit_config()
