@@ -536,6 +536,7 @@ dependencies = [
     { name = "pandas" },
     { name = "requests" },
     { name = "streamlit" },
+    { name = "urllib3" },
 ]
 
 [package.metadata]
@@ -544,6 +545,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "streamlit", specifier = ">=1.45.1" },
+    { name = "urllib3", specifier = ">=2.4.0" },
 ]
 
 [[package]]

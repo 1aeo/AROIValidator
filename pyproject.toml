@@ -8,4 +8,5 @@ dependencies = [
     "pandas>=2.2.3",
     "requests>=2.32.3",
     "streamlit>=1.45.1",
+    "urllib3>=2.4.0",
 ]
