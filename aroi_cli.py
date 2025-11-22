@@ -19,10 +19,11 @@ def run_interactive_mode():
     print("Starting AROI Validator in interactive mode...")
     cmd = [
         sys.executable, "-m", "streamlit", "run", 
-        "app_interactive.py", 
+        "app.py", 
         "--server.port", "5000",
         "--server.address", "0.0.0.0", 
-        "--server.headless", "true"
+        "--server.headless", "true",
+        "--", "--mode", "interactive"
     ]
     subprocess.run(cmd)
 
@@ -30,7 +31,7 @@ def run_interactive_mode():
 def run_batch_mode():
     """Run batch validation and save results to JSON"""
     print("Starting AROI Validator in batch mode...")
-    subprocess.run([sys.executable, "batch_validator.py"])
+    subprocess.run([sys.executable, "app.py", "--mode", "batch"])
 
 
 def run_viewer_mode():
@@ -38,10 +39,11 @@ def run_viewer_mode():
     print("Starting AROI Validator in viewer mode...")
     cmd = [
         sys.executable, "-m", "streamlit", "run", 
-        "app_viewer.py", 
+        "app.py", 
         "--server.port", "5000",
         "--server.address", "0.0.0.0", 
-        "--server.headless", "true"
+        "--server.headless", "true",
+        "--", "--mode", "viewer"
     ]
     subprocess.run(cmd)
 

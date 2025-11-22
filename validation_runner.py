@@ -8,13 +8,14 @@ from pathlib import Path
 from aroi_validator import AROIValidator
 
 
-def run_validation(progress_callback=None, stop_check=None):
+def run_validation(progress_callback=None, stop_check=None, limit=None):
     """
     Run validation with optional progress callback and stop check
     
     Args:
         progress_callback: Function to call with (current, total, result) for progress updates
         stop_check: Function that returns True if validation should stop
+        limit: Maximum number of relays to validate (None for all)
         
     Returns:
         List of validation results
@@ -23,6 +24,11 @@ def run_validation(progress_callback=None, stop_check=None):
     results = []
     
     relays = validator.fetch_relay_data()
+    
+    # Apply limit if specified
+    if limit:
+        relays = relays[:limit]
+    
     total_relays = len(relays)
     
     for idx, relay in enumerate(relays):
