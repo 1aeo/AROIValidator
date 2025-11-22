@@ -40,51 +40,6 @@ def interactive_mode():
     if 'validation_stopped' not in st.session_state:
         st.session_state.validation_stopped = False
     
-    # Header
-    st.title("🧅 Tor Relay AROI Validator - Interactive Mode")
-    st.markdown("Full interactive validation with start/stop controls and real-time tracking")
-    
-    # Sidebar controls
-    with st.sidebar:
-        st.header("🎛️ Controls")
-        
-        # Validation controls
-        st.subheader("Validation")
-        
-        # Start button
-        if not st.session_state.validation_in_progress:
-            if st.button("▶️ Start Validation", type="primary", use_container_width=True):
-                st.session_state.validation_stopped = False
-                start_interactive_validation()
-        
-        # Stop button  
-        if st.session_state.validation_in_progress:
-            if st.button("⏹️ Stop Validation", type="secondary", use_container_width=True):
-                st.session_state.validation_stopped = True
-                st.session_state.validation_in_progress = False
-                st.rerun()
-        
-        st.divider()
-        
-        # Export controls
-        st.subheader("Export")
-        if st.session_state.validation_results:
-            if st.button("📥 Export Results", use_container_width=True):
-                export_results()
-        
-        # Clear results
-        if st.session_state.validation_results:
-            if st.button("🗑️ Clear Results", use_container_width=True):
-                st.session_state.validation_results = []
-                st.session_state.validation_stopped = False
-                st.rerun()
-        
-        st.divider()
-        
-        # Mode info
-        st.subheader("🔧 Current Mode")
-        st.info("**Interactive Mode**\nFull validation controls with real-time tracking")
-    
     # Define helper functions with access to st
     def start_interactive_validation():
         """Start validation in interactive mode"""
@@ -163,6 +118,51 @@ def interactive_mode():
         if st.session_state.validation_results:
             file_path = save_results(st.session_state.validation_results)
             st.success(f"✅ Results exported to {file_path}")
+    
+    # Header
+    st.title("🧅 Tor Relay AROI Validator - Interactive Mode")
+    st.markdown("Full interactive validation with start/stop controls and real-time tracking")
+    
+    # Sidebar controls
+    with st.sidebar:
+        st.header("🎛️ Controls")
+        
+        # Validation controls
+        st.subheader("Validation")
+        
+        # Start button
+        if not st.session_state.validation_in_progress:
+            if st.button("▶️ Start Validation", type="primary", use_container_width=True):
+                st.session_state.validation_stopped = False
+                start_interactive_validation()
+        
+        # Stop button  
+        if st.session_state.validation_in_progress:
+            if st.button("⏹️ Stop Validation", type="secondary", use_container_width=True):
+                st.session_state.validation_stopped = True
+                st.session_state.validation_in_progress = False
+                st.rerun()
+        
+        st.divider()
+        
+        # Export controls
+        st.subheader("Export")
+        if st.session_state.validation_results:
+            if st.button("📥 Export Results", use_container_width=True):
+                export_results()
+        
+        # Clear results
+        if st.session_state.validation_results:
+            if st.button("🗑️ Clear Results", use_container_width=True):
+                st.session_state.validation_results = []
+                st.session_state.validation_stopped = False
+                st.rerun()
+        
+        st.divider()
+        
+        # Mode info
+        st.subheader("🔧 Current Mode")
+        st.info("**Interactive Mode**\nFull validation controls with real-time tracking")
     
     # Main content area
     if st.session_state.validation_results:
