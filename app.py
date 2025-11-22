@@ -130,7 +130,7 @@ def interactive_mode():
         for result in results:
             df_data.append({
                 'Nickname': result.get('nickname', 'Unknown'),
-                'Fingerprint': result.get('fingerprint', '')[:16] + '...',
+                'Fingerprint': result.get('fingerprint', ''),
                 'Valid': '✅' if result['valid'] else '❌',
                 'Proof Type': result.get('proof_type', 'None'),
                 'Domain': result.get('domain', 'N/A'),
@@ -263,6 +263,7 @@ def viewer_mode():
     for result in results:
         df_data.append({
             'Nickname': result.get('nickname', 'Unknown'),
+            'Fingerprint': result.get('fingerprint', ''),
             'Valid': '✅' if result['valid'] else '❌',
             'Proof Type': result.get('proof_type', 'None'),
             'Domain': result.get('domain', 'N/A')
