@@ -301,12 +301,16 @@ def batch_mode():
     print("=" * 50)
     print(f"Starting validation at {datetime.now().isoformat()}")
     
+    # Check for limit parameter
+    import os
+    limit = int(os.environ.get('BATCH_LIMIT', 100))  # Default to 100 for reasonable performance
+    
     # Run validation with progress output
     def progress_callback(current, total, result):
         status = "✓" if result['valid'] else "✗"
         print(f"[{current}/{total}] {status} {result.get('nickname', 'Unknown')}")
     
-    results = run_validation(progress_callback=progress_callback)
+    results = run_validation(progress_callback=progress_callback, limit=limit)
     
     # Save results
     file_path = save_results(results)
