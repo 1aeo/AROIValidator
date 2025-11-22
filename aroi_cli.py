@@ -1,68 +1,31 @@
 #!/usr/bin/env python3
 """
-AROI Validator CLI - Command line interface for different operational modes
-
-Usage:
-    python aroi_cli.py interactive    # Default: Full interactive Streamlit app
-    python aroi_cli.py batch          # Batch mode: Validate and save to JSON
-    python aroi_cli.py viewer         # Viewer mode: Web interface showing results only
+AROI Validator CLI - Ultra-Simplified Dispatcher
 """
-
-import argparse
 import sys
 import subprocess
-from pathlib import Path
-
-
-def run_interactive_mode():
-    """Run the full interactive Streamlit application (default mode)"""
-    print("Starting AROI Validator in interactive mode...")
-    cmd = [
-        sys.executable, "-m", "streamlit", "run", 
-        "app.py", 
-        "--server.port", "5000",
-        "--server.address", "0.0.0.0", 
-        "--server.headless", "true",
-        "--", "--mode", "interactive"
-    ]
-    subprocess.run(cmd)
-
-
-def run_batch_mode():
-    """Run batch validation and save results to JSON"""
-    print("Starting AROI Validator in batch mode...")
-    subprocess.run([sys.executable, "app.py", "--mode", "batch"])
-
-
-def run_viewer_mode():
-    """Run results viewer web interface"""
-    print("Starting AROI Validator in viewer mode...")
-    cmd = [
-        sys.executable, "-m", "streamlit", "run", 
-        "app.py", 
-        "--server.port", "5000",
-        "--server.address", "0.0.0.0", 
-        "--server.headless", "true",
-        "--", "--mode", "viewer"
-    ]
-    subprocess.run(cmd)
+import argparse
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="AROI Validator - Multiple operational modes",
+        description="AROI Validator with Parallel Processing Support",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Operational Modes:
-  interactive  Full interactive validation with start/stop controls (default)
-  batch        Automated validation with JSON output (suitable for cron)
-  viewer       Web interface showing validation results only
+Modes:
+  interactive  Web UI with parallel validation controls (default)
+  batch        Automated parallel batch processing
+  viewer       View saved validation results
+
+Environment Variables (for batch mode):
+  BATCH_LIMIT   Max relays to validate (default: 100)
+  PARALLEL      Use parallel processing (default: true)
+  MAX_WORKERS   Number of worker threads (default: 10)
 
 Examples:
-  python aroi_cli.py                    # Run interactive mode
-  python aroi_cli.py interactive        # Run interactive mode explicitly
-  python aroi_cli.py batch              # Run batch validation
-  python aroi_cli.py viewer             # Run results viewer
+  python aroi_cli.py                           # Interactive mode
+  python aroi_cli.py batch                     # Batch with defaults
+  BATCH_LIMIT=500 MAX_WORKERS=20 python aroi_cli.py batch
         """
     )
     
@@ -71,18 +34,34 @@ Examples:
         nargs='?', 
         default='interactive',
         choices=['interactive', 'batch', 'viewer'],
-        help='Operational mode (default: interactive)'
+        help='Operational mode'
     )
     
     args = parser.parse_args()
     
-    # Dispatch to appropriate mode
-    if args.mode == 'interactive':
-        run_interactive_mode()
-    elif args.mode == 'batch':
-        run_batch_mode()
-    elif args.mode == 'viewer':
-        run_viewer_mode()
+    if args.mode == 'batch':
+        # Run batch mode directly
+        subprocess.run([sys.executable, "app.py", "--mode", "batch"])
+    else:
+        # Run Streamlit for interactive/viewer modes
+        print(f"Starting AROI Validator - {args.mode.capitalize()} Mode")
+        print("=" * 50)
+        print("Opening web interface on port 5000...")
+        
+        cmd = [
+            sys.executable, "-m", "streamlit", "run", 
+            "app.py", 
+            "--server.port", "5000",
+            "--server.address", "0.0.0.0", 
+            "--server.headless", "true",
+            "--", "--mode", args.mode
+        ]
+        
+        try:
+            subprocess.run(cmd)
+        except KeyboardInterrupt:
+            print("\nShutting down...")
+            sys.exit(0)
 
 
 if __name__ == "__main__":
