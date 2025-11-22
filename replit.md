@@ -2,7 +2,9 @@
 
 ## Overview
 
-AROI Validator is a web-based and CLI tool for validating Tor relay operators' contact information using the AROI (Accuracy, Relevance, Objectivity, and Informativeness) framework. The application validates Tor relay metadata by checking DNS records and URI-based proofs to verify relay operator authenticity. It supports both interactive web-based validation through Streamlit and automated batch processing with parallel execution capabilities.
+The AROI Validator is a validation tool for evaluating Tor relay operator proofs using the Accuracy, Relevance, Objectivity, and Informativeness (AROI) framework. The application validates relay operator contact information through DNS and URI-based RSA proofs, querying the Tor network's Onionoo API to fetch relay data and verify cryptographic proofs of ownership.
+
+The system provides both a web-based interface (Streamlit) and command-line tools for batch processing Tor relay validations with parallel processing capabilities.
 
 ## User Preferences
 
@@ -12,98 +14,138 @@ Preferred communication style: Simple, everyday language.
 
 ### Application Structure
 
-The application uses a modular architecture with three primary interfaces:
+The application follows a modular Python architecture with three primary entry points:
 
-1. **Web Interface (app.py)**: Streamlit-based interactive UI for real-time validation with visual feedback and progress tracking
-2. **CLI Interface (aroi_cli.py)**: Command-line dispatcher that routes between interactive, batch, and viewer modes
-3. **Core Validator (aroi_validator.py)**: Contains the validation logic with parallel processing support using Python's concurrent.futures
+1. **app.py** - Streamlit web application providing interactive UI for relay validation
+2. **aroi_cli.py** - Command-line dispatcher supporting interactive, batch, and viewer modes
+3. **aroi_validator.py** - Core validation engine with parallel processing support
 
-**Rationale**: Separation of interfaces from core logic allows the same validation engine to be used across different interaction modes while maintaining code reusability.
+**Rationale**: Separating concerns between UI (Streamlit), CLI orchestration, and validation logic allows for flexible usage patterns while maintaining a single source of truth for validation logic.
 
-### Parallel Processing Architecture
+### Frontend Architecture
 
-The validator implements a thread-pool based parallel processing system through the `ParallelAROIValidator` class:
+**Technology**: Streamlit web framework
 
-- Uses `concurrent.futures.ThreadPoolExecutor` for concurrent relay validation
-- Configurable worker thread count (default: 10)
-- Progress tracking with callback mechanisms for UI updates
+**Design Decision**: Streamlit was chosen for rapid development of an interactive web interface without requiring separate frontend/backend implementation. It provides:
+- Real-time validation feedback
+- Session state management for tracking validation progress
+- Built-in progress bars and status updates
+- Data visualization with pandas integration
 
-**Rationale**: Validating Tor relays involves network I/O (DNS queries, HTTP requests), making it ideal for parallel processing. Thread-based concurrency is chosen over async/await because the underlying libraries (requests, dnspython) are synchronous.
+**Trade-offs**: 
+- Pros: Fast development, Python-native, built-in UI components
+- Cons: Limited customization compared to traditional web frameworks, primarily single-user focused
 
-**Trade-offs**: Thread pools have GIL limitations for CPU-bound tasks, but this application is I/O-bound, making threads appropriate. The alternative would be multiprocessing, which has higher overhead for this use case.
+### Backend Architecture
 
-### Validation Logic
+**Core Component**: ParallelAROIValidator class in aroi_validator.py
 
-The core validation process checks two proof types:
+**Key Features**:
+1. Concurrent validation using ThreadPoolExecutor
+2. Configurable worker pool (default: 10 workers)
+3. Custom legacy TLS adapter for compatibility with older Tor relay servers
+4. Session-based HTTP client with custom user agent
 
-1. **DNS RSA Proofs**: Validates cryptographic signatures in DNS TXT records
-2. **URI RSA Proofs**: Validates signatures served via HTTP/HTTPS endpoints
+**Design Pattern**: The validator uses a class-based approach with parallel processing capabilities through Python's concurrent.futures module.
 
-**Architectural Decision**: The validator uses a custom `LegacyTLSAdapter` that relaxes TLS requirements to support older Tor relay servers:
-- Sets minimum TLS version to TLSv1
-- Disables certificate verification for legacy compatibility
-- Uses reduced security level ciphers
+**Security Considerations**: 
+- SSL verification is disabled for legacy Tor relays (TLSv1 support)
+- Custom TLS adapter with reduced security level (SECLEVEL=1) to support older ciphers
+- This is necessary for communicating with legacy Tor infrastructure but documented as a trade-off
 
-**Rationale**: Tor relay operators may run older server configurations, and strict TLS validation would cause false negatives. Security is acceptable here because the cryptographic validation happens at the application layer through RSA signature verification.
+### Validation Flow
 
-### State Management
+1. Fetch relay data from Onionoo API
+2. Extract AROI proof fields from relay contact information
+3. Validate proofs via DNS TXT records or URI-based RSA verification
+4. Support for both dns-rsa and uri-rsa proof types
+5. Calculate success rates and categorize results by proof type
 
-The Streamlit application uses session state for tracking:
-- Validation progress and results
-- Stop/start controls for batch operations
-- Configuration settings (parallel mode, worker count, batch limits)
+### Data Storage
 
-**Rationale**: Streamlit's session state provides a simple way to maintain state across reruns without external storage, suitable for a single-user validation tool.
+**Format**: JSON files with timestamped filenames
 
-### Data Persistence
+**Location**: `validation_results/` directory
 
-Validation results are stored as JSON files in the `validation_results/` directory:
-- Timestamped files for historical tracking
-- A `latest.json` symlink for quick access
-- Structured format with metadata, statistics, and individual relay results
+**Schema**:
+```json
+{
+  "metadata": {
+    "timestamp": "ISO timestamp",
+    "total_relays": int,
+    "valid_relays": int,
+    "invalid_relays": int,
+    "success_rate": float
+  },
+  "statistics": {
+    "proof_types": {
+      "dns_rsa": {...},
+      "uri_rsa": {...},
+      "no_proof": {...}
+    }
+  },
+  "results": [...]
+}
+```
 
-**Rationale**: JSON provides human-readable storage without database overhead, appropriate for the validation use case where results are primarily for analysis rather than querying.
+**Rationale**: JSON provides human-readable results that can be easily consumed by the viewer mode or external tools. Results are timestamped for historical tracking, with a `latest.json` symlink for quick access.
+
+### Configuration Management
+
+**Method**: Streamlit configuration via `.streamlit/config.toml`
+
+**Setup Script**: setup.py handles dependency installation and configuration
+
+**Dependencies**:
+- streamlit - Web UI framework
+- dnspython - DNS resolution and DNSSEC validation
+- pandas - Data manipulation and display
+- requests - HTTP client
+- urllib3 - HTTP library with custom SSL handling
+
+**Rationale**: Automated setup script simplifies deployment on new environments (particularly Replit), handling both uv (Replit's package manager) and pip as fallbacks.
 
 ## External Dependencies
 
-### Core Libraries
+### Third-Party APIs
 
-1. **Streamlit**: Web UI framework for the interactive interface
-   - Provides real-time UI updates and progress tracking
-   - Handles user input and result visualization
+**Onionoo API** (`https://onionoo.torproject.org/details`)
+- Purpose: Tor network relay status and metadata
+- Usage: Fetches relay details including contact information for validation
+- No authentication required
+- Rate limiting considerations apply
 
-2. **dnspython**: DNS query and DNSSEC validation library
-   - Used for querying TXT records containing proof data
-   - Performs DNSSEC validation when available
+### Python Libraries
 
-3. **requests + urllib3**: HTTP client libraries
-   - Fetches URI-based proofs from relay operator websites
-   - Custom adapter for legacy TLS support
+**Core Dependencies**:
+- `streamlit` - Web application framework for interactive UI
+- `dnspython` - DNS query and DNSSEC validation
+- `pandas` - Data structures for relay statistics and result display
+- `requests` - HTTP client with session management
+- `urllib3` - Low-level HTTP handling with SSL customization
 
-4. **pandas**: Data manipulation and display
-   - Formats validation results for tabular display in Streamlit UI
+**Standard Library**:
+- `concurrent.futures` - Parallel processing via ThreadPoolExecutor
+- `ssl` - TLS/SSL context configuration
+- `json` - Result serialization
+- `base64` - Encoding for cryptographic operations
+- `pathlib` - File system operations
 
-### External Services
+### Network Services
 
-1. **Onionoo API** (https://onionoo.torproject.org/details)
-   - Official Tor Project service providing relay metadata
-   - Source of relay information including fingerprints, nicknames, and contact details
-   - No authentication required; public read-only API
+**DNS Resolution**:
+- Used for dns-rsa proof validation via TXT records
+- DNSSEC validation support included in validation flow
+- Relies on system DNS resolver configuration
 
-**Rationale**: Onionoo is the authoritative source for Tor relay data, making it the natural choice for relay discovery and metadata retrieval.
+**HTTP/HTTPS**:
+- Legacy TLS support (TLSv1+) for older Tor relay servers
+- Custom SSL context with reduced security requirements
+- Session pooling for performance optimization
 
-### Python Standard Library Dependencies
+### Deployment Platform
 
-- `concurrent.futures`: Parallel processing implementation
-- `ssl`: TLS configuration for legacy server support
-- `json`, `pathlib`, `datetime`: Data handling and file operations
-- `argparse`, `subprocess`: CLI interface implementation
-
-### Development and Deployment
-
-The project includes a `setup.py` script that:
-- Creates Streamlit configuration for Replit deployment
-- Installs dependencies via `uv` (Replit's package manager) with pip fallback
-- Configures the server to run on port 5000 with headless mode
-
-**Rationale**: Automated setup reduces deployment friction on Replit and ensures consistent configuration across instances.
+**Replit-Specific**:
+- Configuration assumes port 5000 for Streamlit server
+- Setup script detects and prefers `uv` package manager
+- Headless server mode enabled by default

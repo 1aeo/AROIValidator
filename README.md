@@ -28,10 +28,6 @@ That's it! The setup script handles all dependencies and configuration.
 
 Run the Streamlit web interface:
 ```bash
-./run.sh
-```
-Or directly:
-```bash
 streamlit run app.py --server.port 5000
 ```
 
