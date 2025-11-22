@@ -1,453 +1,339 @@
+"""
+Unified AROI Validator Application
+Supports interactive, batch, and viewer modes
+"""
 import streamlit as st
-import pandas as pd
+import sys
 import json
-import io
-from aroi_validator import AROIValidator
+from datetime import datetime
+from pathlib import Path
+from ui_components import (
+    display_summary_metrics,
+    display_proof_type_analysis,
+    display_results_table,
+    display_validation_details
+)
+from validation_runner import (
+    run_validation,
+    calculate_statistics,
+    save_results,
+    load_results,
+    list_result_files
+)
 
-def display_results_summary():
-    """Display the validation results summary and details"""
+
+def interactive_mode():
+    """Interactive validation mode with start/stop controls"""
+    st.set_page_config(
+        page_title="Tor Relay AROI Validator - Interactive",
+        page_icon="🧅",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Initialize session state
+    if 'validation_results' not in st.session_state:
+        st.session_state.validation_results = []
+    if 'validation_in_progress' not in st.session_state:
+        st.session_state.validation_in_progress = False
+    if 'validation_stopped' not in st.session_state:
+        st.session_state.validation_stopped = False
+    
+    # Header
+    st.title("🧅 Tor Relay AROI Validator - Interactive Mode")
+    st.markdown("Full interactive validation with start/stop controls and real-time tracking")
+    
+    # Sidebar controls
+    with st.sidebar:
+        st.header("🎛️ Controls")
+        
+        # Validation controls
+        st.subheader("Validation")
+        
+        # Start button
+        if not st.session_state.validation_in_progress:
+            if st.button("▶️ Start Validation", type="primary", use_container_width=True):
+                st.session_state.validation_stopped = False
+                start_interactive_validation()
+        
+        # Stop button  
+        if st.session_state.validation_in_progress:
+            if st.button("⏹️ Stop Validation", type="secondary", use_container_width=True):
+                st.session_state.validation_stopped = True
+                st.session_state.validation_in_progress = False
+                st.rerun()
+        
+        st.divider()
+        
+        # Export controls
+        st.subheader("Export")
+        if st.session_state.validation_results:
+            if st.button("📥 Export Results", use_container_width=True):
+                export_results()
+        
+        # Clear results
+        if st.session_state.validation_results:
+            if st.button("🗑️ Clear Results", use_container_width=True):
+                st.session_state.validation_results = []
+                st.session_state.validation_stopped = False
+                st.rerun()
+        
+        st.divider()
+        
+        # Mode info
+        st.subheader("🔧 Current Mode")
+        st.info("**Interactive Mode**\nFull validation controls with real-time tracking")
+    
+    # Main content area
+    if st.session_state.validation_results:
+        display_interactive_results()
+    else:
+        st.info("👆 Click 'Start Validation' in the sidebar to begin validating Tor relays")
+
+
+def viewer_mode():
+    """View pre-computed validation results"""
+    st.set_page_config(
+        page_title="Tor Relay AROI Validator - Results Viewer",
+        page_icon="📊",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    st.title("📊 Tor Relay AROI Validator - Results Viewer")
+    st.markdown("View pre-computed validation results")
+    
+    # Sidebar file selector
+    with st.sidebar:
+        st.header("📁 Result Files")
+        
+        result_files = list_result_files()
+        
+        if not result_files:
+            st.warning("No validation results found. Run a validation first.")
+            return
+        
+        # File selector
+        file_options = {
+            "Latest Results": "latest.json"
+        }
+        
+        for file_path in result_files[:10]:  # Limit to 10 most recent
+            timestamp = file_path.stem.replace('aroi_validation_', '')
+            try:
+                dt = datetime.strptime(timestamp, '%Y%m%d_%H%M%S')
+                display_name = dt.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                display_name = file_path.name
+            file_options[display_name] = file_path.name
+        
+        selected_display = st.selectbox(
+            "Select Results File",
+            options=list(file_options.keys()),
+            key="file_selector"
+        )
+        
+        selected_file = file_options[selected_display]
+        
+        st.divider()
+        st.subheader("🔧 Current Mode")
+        st.info("**Viewer Mode**\nView validation results without controls")
+    
+    # Load and display selected results
+    data = load_results(selected_file)
+    
+    if not data:
+        st.error(f"Error loading results from {selected_file}")
+        return
+    
+    display_viewer_results(data)
+
+
+def batch_mode():
+    """Batch validation mode for automated processing"""
+    print("AROI Batch Validator")
+    print("=" * 50)
+    print(f"Starting validation at {datetime.now().isoformat()}")
+    
+    # Run validation with progress output
+    def progress_callback(current, total, result):
+        status = "✓" if result['valid'] else "✗"
+        print(f"[{current}/{total}] {status} {result.get('nickname', 'Unknown')}")
+    
+    results = run_validation(progress_callback=progress_callback)
+    
+    # Save results
+    file_path = save_results(results)
+    
+    # Print summary
+    stats = calculate_statistics(results)
+    print("\n" + "=" * 50)
+    print("VALIDATION COMPLETE")
+    print(f"Total Relays: {stats['total_relays']}")
+    print(f"Valid AROI: {stats['valid_relays']} ({stats['success_rate']:.1f}%)")
+    print(f"Invalid AROI: {stats['invalid_relays']}")
+    print(f"Results saved to: {file_path}")
+    
+    # Also output JSON to stdout for piping
+    output = {
+        'timestamp': datetime.now().isoformat(),
+        'statistics': stats,
+        'results_file': str(file_path)
+    }
+    print("\n" + json.dumps(output, indent=2))
+
+
+def start_interactive_validation():
+    """Start validation in interactive mode"""
+    st.session_state.validation_in_progress = True
+    st.session_state.validation_results = []
+    
+    # Create progress container
+    progress_container = st.container()
+    
+    with progress_container:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        def progress_callback(current, total, result):
+            # Check if stopped
+            if st.session_state.validation_stopped:
+                return
+            
+            # Update progress
+            progress = current / total
+            progress_bar.progress(progress)
+            status_text.text(f"Validating: {current}/{total} - {result.get('nickname', 'Unknown')}")
+            
+            # Add result
+            st.session_state.validation_results.append(result)
+        
+        def stop_check():
+            return st.session_state.validation_stopped
+        
+        # Run validation
+        results = run_validation(progress_callback=progress_callback, stop_check=stop_check)
+        
+        # Update final results
+        st.session_state.validation_results = results
+        st.session_state.validation_in_progress = False
+        
+        # Clear progress indicators
+        progress_bar.empty()
+        status_text.empty()
+        
+        st.success(f"✅ Validation complete! Processed {len(results)} relays.")
+        st.rerun()
+
+
+def display_interactive_results():
+    """Display results for interactive mode"""
     results = st.session_state.validation_results
     
     if not results:
         return
     
-    # Summary statistics
-    total_relays = len(results)
-    valid_relays = sum(1 for r in results if r['valid'])
-    invalid_relays = total_relays - valid_relays
+    # Calculate statistics
+    stats = calculate_statistics(results)
     
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Relays", total_relays)
-    with col2:
-        st.metric("Valid AROI", valid_relays, delta=f"{(valid_relays/total_relays*100):.1f}%")
-    with col3:
-        st.metric("Invalid AROI", invalid_relays, delta=f"{(invalid_relays/total_relays*100):.1f}%")
-    
-    # Color-coded validation status summary
-    st.subheader("🎨 Color-Coded Status Overview")
-    
-    # Calculate validation statistics by categories
-    dns_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'dns-rsa' and r['valid'])
-    dns_rsa_total = sum(1 for r in results if r.get('proof_type') == 'dns-rsa')
-    uri_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'uri-rsa' and r['valid'])
-    uri_rsa_total = sum(1 for r in results if r.get('proof_type') == 'uri-rsa')
-    missing_fields = sum(1 for r in results if 'Missing AROI fields' in str(r.get('error', '')))
-    unsupported_version = sum(1 for r in results if 'Unsupported ciissversion' in str(r.get('error', '')))
-    unsupported_proof = sum(1 for r in results if 'Unsupported proof type' in str(r.get('error', '')))
-    
-    # Create visual status summary with color coding
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**Validation by Proof Type:**")
-        
-        # DNS-RSA validation
-        if dns_rsa_total > 0:
-            dns_success_rate = (dns_rsa_valid / dns_rsa_total) * 100
-            if dns_success_rate >= 80:
-                color = "🟢"
-            elif dns_success_rate >= 50:
-                color = "🟡"
-            else:
-                color = "🔴"
-            st.write(f"{color} DNS-RSA: {dns_rsa_valid}/{dns_rsa_total} ({dns_success_rate:.1f}%)")
-        
-        # URI-RSA validation
-        if uri_rsa_total > 0:
-            uri_success_rate = (uri_rsa_valid / uri_rsa_total) * 100
-            if uri_success_rate >= 80:
-                color = "🟢"
-            elif uri_success_rate >= 50:
-                color = "🟡"
-            else:
-                color = "🔴"
-            st.write(f"{color} URI-RSA: {uri_rsa_valid}/{uri_rsa_total} ({uri_success_rate:.1f}%)")
-    
-    with col2:
-        st.write("**Common Issues:**")
-        
-        if missing_fields > 0:
-            st.write(f"🔴 Missing Fields: {missing_fields} relays")
-        
-        if unsupported_version > 0:
-            st.write(f"🟠 Unsupported Version: {unsupported_version} relays")
-        
-        if unsupported_proof > 0:
-            st.write(f"🟠 Unsupported Proof Type: {unsupported_proof} relays")
-        
-        if missing_fields == 0 and unsupported_version == 0 and unsupported_proof == 0:
-            st.write("🟢 No common configuration issues found")
-    
-    # Overall health indicator
-    overall_success_rate = (valid_relays / total_relays) * 100 if total_relays > 0 else 0
-    
-    if overall_success_rate >= 80:
-        health_color = "🟢"
-        health_status = "Excellent"
-    elif overall_success_rate >= 60:
-        health_color = "🟡"
-        health_status = "Good"
-    elif overall_success_rate >= 40:
-        health_color = "🟠"
-        health_status = "Fair"
-    else:
-        health_color = "🔴"
-        health_status = "Poor"
-    
-    st.info(f"{health_color} **Overall Validation Health: {health_status}** ({overall_success_rate:.1f}% success rate)")
-
-def main():
-    st.title("🔍 Tor Relay AROI Validator")
-    st.markdown("Validate Tor relay AROI (Autonomous Relay Operator Identity) proofs through DNS and URI verification")
-    
-    # Initialize session state
-    if 'validation_results' not in st.session_state:
-        st.session_state.validation_results = None
-    if 'validation_in_progress' not in st.session_state:
-        st.session_state.validation_in_progress = False
-    
-    # Main layout with sections
-    st.header("🚀 Validation Setup")
-    
-    # Data source selection
-    data_source = st.radio(
-        "Choose data source:",
-        ["Fetch from Onionoo API", "Upload JSON file"],
-        help="Fetch relay data automatically from Tor's Onionoo API or upload your own relay data file"
+    # Summary section
+    st.subheader("📊 Validation Results Summary")
+    display_summary_metrics(
+        stats['total_relays'],
+        stats['valid_relays'],
+        stats['invalid_relays'],
+        stats['success_rate']
     )
     
-    if data_source == "Fetch from Onionoo API":
-        st.info("This will fetch relay data from https://onionoo.torproject.org/details")
-        
-        # Start and Stop buttons side by side
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🚀 Start Validation", type="primary", disabled=st.session_state.validation_in_progress):
-                st.session_state.validation_in_progress = True
-                st.session_state.validation_results = []  # Clear previous results on new start
-                st.session_state.validation_stopped = False  # Reset stopped flag
-                st.rerun()
-        
-        with col2:
-            if st.button("⏹️ Stop Validation", type="secondary", disabled=not st.session_state.validation_in_progress):
-                st.session_state.validation_in_progress = False
-                st.session_state.validation_stopped = True
-                if hasattr(st.session_state, 'validation_started'):
-                    del st.session_state.validation_started
-                # Don't rerun - let the validation loop detect the stop
-            
-    else:  # Upload JSON file
-        st.info("Upload a JSON file containing relay data with fingerprint, nickname, and contact fields")
-        
-        uploaded_file = st.file_uploader(
-            "Choose a JSON file",
-            type="json",
-            help="File should contain relay data in Onionoo format"
-        )
-        
-        if uploaded_file is not None:
-            try:
-                file_content = uploaded_file.read()
-                relay_data = json.loads(file_content)
-                
-                # Validate file structure
-                if isinstance(relay_data, dict) and "relays" in relay_data:
-                    relays = relay_data["relays"]
-                elif isinstance(relay_data, list):
-                    relays = relay_data
-                else:
-                    st.error("Invalid file format. Expected JSON with 'relays' array or direct array of relays.")
-                    return
-                
-                st.success(f"✅ Loaded {len(relays)} relays from file")
-                
-                # Store relays in session state for later use
-                st.session_state.relays = relays
-                
-                # Start and Stop buttons side by side for uploaded data
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if st.button("🚀 Start Validation", type="primary", disabled=st.session_state.validation_in_progress, key="start_upload"):
-                        st.session_state.validation_in_progress = True
-                        st.session_state.validation_results = []  # Clear previous results on new start
-                        st.session_state.validation_stopped = False  # Reset stopped flag
-                        st.rerun()
-                
-                with col2:
-                    if st.button("⏹️ Stop Validation", type="secondary", disabled=not st.session_state.validation_in_progress, key="stop_upload"):
-                        st.session_state.validation_in_progress = False
-                        st.session_state.validation_stopped = True
-                        if hasattr(st.session_state, 'validation_started'):
-                            del st.session_state.validation_started
-                        # Don't rerun - let the validation loop detect the stop
-                    
-            except json.JSONDecodeError:
-                st.error("❌ Invalid JSON file. Please check the file format.")
-            except Exception as e:
-                st.error(f"❌ Error reading file: {str(e)}")
+    # Proof type analysis
+    display_proof_type_analysis(results)
     
-    # Check if validation should start
-    if st.session_state.get('validation_in_progress', False) and not hasattr(st.session_state, 'validation_started'):
-        st.session_state.validation_started = True
-        if data_source == "Fetch from Onionoo API":
-            run_validation()
-        elif 'relays' in st.session_state:
-            run_validation(st.session_state.relays)
+    # Detailed results table
+    st.subheader("📋 Detailed Results")
+    df, filtered_results = display_results_table(results, show_filters=True)
     
-    # Create a persistent results container
-    st.divider()
-    results_container = st.container()
-    
-    with results_container:
-        st.header("📊 Validation Results")
-        
-        # Show status and progress in a placeholder that doesn't clear
-        status_placeholder = st.empty()
-        results_placeholder = st.empty()
-        
-        with status_placeholder.container():
-            if st.session_state.get('validation_in_progress', False):
-                st.info("Validation in progress...")
-                if st.session_state.validation_results and len(st.session_state.validation_results) > 0:
-                    current_count = len(st.session_state.validation_results)
-                    valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
-                    st.success(f"Progress: {current_count} relays processed, {valid_count} valid")
-            elif st.session_state.get('validation_stopped', False):
-                st.warning("Validation stopped by user")
-                if st.session_state.validation_results and len(st.session_state.validation_results) > 0:
-                    current_count = len(st.session_state.validation_results)
-                    valid_count = sum(1 for r in st.session_state.validation_results if r.get('valid', False))
-                    st.info(f"Partial results: {current_count} relays processed, {valid_count} valid")
-            else:
-                if st.session_state.validation_results is None or len(st.session_state.validation_results) == 0:
-                    st.info("No validation results yet. Start validation above to see results here.")
-        
-        # Results content in its own placeholder
-        with results_placeholder.container():
-            if st.session_state.validation_results and len(st.session_state.validation_results) > 0:
-                display_results_summary()
-    
-    # Export section (only show if results exist)
-    if st.session_state.validation_results is not None and len(st.session_state.validation_results) > 0:
-        st.divider()
-        export_results()
+    # Validation details
+    if filtered_results:
+        display_validation_details(filtered_results)
 
-def run_validation(relay_data=None):
-    """Run AROI validation with progress tracking"""
-    st.session_state.validation_in_progress = True
-    
-    try:
-        validator = AROIValidator()
-        
-        # Create progress containers
-        progress_container = st.container()
-        with progress_container:
-            st.info("🚀 Starting validation process...")
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-        
-        # Fetch or use provided relay data
-        if relay_data is None:
-            status_text.text("📡 Fetching relay data from Onionoo...")
-            relays = validator.fetch_relay_data()
-            st.success(f"✅ Fetched {len(relays)} relays from Onionoo")
-        else:
-            relays = relay_data
-            st.success(f"✅ Using {len(relays)} relays from uploaded file")
-        
-        # Validate relays
-        status_text.text("🔍 Validating AROI proofs...")
-        results = []
-        
-        # Create live status display at the top
-        live_status = st.empty()
-        
-        # Create live results summary placeholder
-        live_results_placeholder = st.empty()
-        
-        # Create container for detailed validation steps (collapsed by default)
-        validation_details = st.expander("Detailed Validation Steps", expanded=False)
-        
-        for i, relay in enumerate(relays):
-            # Check if validation was stopped
-            if not st.session_state.validation_in_progress:
-                st.warning("⏹️ Validation stopped by user")
-                break
-                
-            # Update progress
-            progress = (i + 1) / len(relays)
-            progress_bar.progress(progress)
-            nickname = relay.get('nickname', 'Unknown')
-            fingerprint = relay.get('fingerprint', 'N/A')
-            status_text.text(f"🔍 Validating relay {i + 1}/{len(relays)}: {nickname}")
-            
-            with validation_details:
-                st.write(f"**Relay {i + 1}: {nickname}** (`{fingerprint[:16]}...`)")
-                
-                # Create columns for checklist
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    checklist_container = st.container()
-                
-                # Validate individual relay with step tracking
-                result = validator.validate_relay_with_steps(relay, checklist_container)
-                results.append(result)
-                
-                with col2:
-                    if result['valid']:
-                        st.success("✅ Valid")
-                    else:
-                        st.error("❌ Invalid")
-                
-                if i < len(relays) - 1:  # Don't add divider after last relay
-                    st.divider()
-            
-            # Update session state with current results before updating UI
-            st.session_state.validation_results = results.copy()
-            
-            # Update live results summary in placeholder
-            valid_count = sum(1 for r in results if r['valid'])
-            total_count = len(results)
-            with live_results_placeholder.container():
-                # Show current results summary
-                st.subheader("📊 Live Results Summary")
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Processed", total_count, f"of {len(relays)}")
-                with col2:
-                    st.metric("Valid AROI", valid_count, f"{(valid_count/total_count*100):.1f}%")
-                with col3:
-                    invalid_count = total_count - valid_count
-                    st.metric("Invalid AROI", invalid_count, f"{(invalid_count/total_count*100):.1f}%")
-                
-                # Show proof type breakdown if we have results
-                if results:
-                    dns_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'dns-rsa' and r['valid'])
-                    dns_rsa_total = sum(1 for r in results if r.get('proof_type') == 'dns-rsa')
-                    uri_rsa_valid = sum(1 for r in results if r.get('proof_type') == 'uri-rsa' and r['valid'])
-                    uri_rsa_total = sum(1 for r in results if r.get('proof_type') == 'uri-rsa')
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if dns_rsa_total > 0:
-                            dns_rate = (dns_rsa_valid / dns_rsa_total) * 100
-                            color = "🟢" if dns_rate >= 80 else "🟡" if dns_rate >= 50 else "🔴"
-                            st.write(f"{color} DNS-RSA: {dns_rsa_valid}/{dns_rsa_total} ({dns_rate:.1f}%)")
-                    
-                    with col2:
-                        if uri_rsa_total > 0:
-                            uri_rate = (uri_rsa_valid / uri_rsa_total) * 100
-                            color = "🟢" if uri_rate >= 80 else "🟡" if uri_rate >= 50 else "🔴"
-                            st.write(f"{color} URI-RSA: {uri_rsa_valid}/{uri_rsa_total} ({uri_rate:.1f}%)")
-        
-        # Final update to session state
-        st.session_state.validation_results = results
-        
-        # Clear progress indicators
-        progress_container.empty()
-        
-        # Show completion message
-        total_relays = len(results)
-        valid_relays = sum(1 for r in results if r['valid'])
-        invalid_relays = total_relays - valid_relays
-        
-        if st.session_state.get('validation_stopped', False):
-            st.warning(f"⏹️ Validation stopped! {valid_relays} valid, {invalid_relays} invalid out of {total_relays} relays processed")
-        else:
-            st.success(f"✅ Validation complete! {valid_relays} valid, {invalid_relays} invalid out of {total_relays} relays")
-        
-    except Exception as e:
-        st.error(f"❌ Validation failed: {str(e)}")
-    finally:
-        st.session_state.validation_in_progress = False
 
+def display_viewer_results(data):
+    """Display results for viewer mode"""
+    metadata = data.get('metadata', {})
+    statistics = data.get('statistics', {})
+    results = data.get('results', [])
+    
+    # Header with timestamp
+    timestamp = metadata.get('timestamp', 'Unknown')
+    st.subheader(f"📊 Validation Results - {timestamp}")
+    
+    # Summary metrics
+    display_summary_metrics(
+        statistics['total_relays'],
+        statistics['valid_relays'],
+        statistics['invalid_relays'],
+        statistics['success_rate']
+    )
+    
+    # Proof type analysis
+    display_proof_type_analysis(results)
+    
+    # Detailed results table
+    st.subheader("📋 Detailed Results")
+    df, filtered_results = display_results_table(results, show_filters=True)
+    
+    # Validation details
+    if filtered_results:
+        display_validation_details(filtered_results)
+    
+    # Export button
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        if st.button("📥 Export as JSON"):
+            st.download_button(
+                label="Download JSON",
+                data=json.dumps(data, indent=2),
+                file_name=f"aroi_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json"
+            )
+    
+    with col2:
+        if df is not None and st.button("📊 Export as CSV"):
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="Download CSV",
+                data=csv,
+                file_name=f"aroi_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
 
 
 def export_results():
-    """Export validation results"""
-    if st.session_state.validation_results is None:
-        st.info("👆 No validation results to export. Use the 'Validate' tab to start validation.")
-        return
+    """Export current results to file"""
+    if st.session_state.validation_results:
+        file_path = save_results(st.session_state.validation_results)
+        st.success(f"✅ Results exported to {file_path}")
+
+
+def main():
+    """Main entry point - determine mode from command line or default to interactive"""
+    # Check for command line mode argument
+    mode = "interactive"  # Default mode
     
-    st.header("📁 Export Validation Results")
+    # Check if --mode argument is provided
+    if "--mode" in sys.argv:
+        mode_index = sys.argv.index("--mode") + 1
+        if mode_index < len(sys.argv):
+            mode = sys.argv[mode_index]
     
-    results = st.session_state.validation_results
-    
-    # Export options
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        export_format = st.selectbox(
-            "Export Format",
-            ["JSON", "CSV"],
-            help="Choose the format for exporting results"
-        )
-    
-    with col2:
-        export_filter = st.selectbox(
-            "Export Filter",
-            ["All Results", "Valid Only", "Invalid Only"],
-            help="Choose which results to export"
-        )
-    
-    # Apply export filter
-    if export_filter == "Valid Only":
-        export_data = [r for r in results if r['valid']]
-    elif export_filter == "Invalid Only":
-        export_data = [r for r in results if not r['valid']]
+    # Route to appropriate mode
+    if mode == "batch":
+        batch_mode()
+    elif mode == "viewer":
+        viewer_mode()
     else:
-        export_data = results
-    
-    # Generate export data
-    if export_format == "JSON":
-        export_content = json.dumps(export_data, indent=2)
-        file_extension = "json"
-        mime_type = "application/json"
-    else:  # CSV
-        df = pd.DataFrame(export_data)
-        export_content = df.to_csv(index=False)
-        file_extension = "csv"
-        mime_type = "text/csv"
-    
-    # Display preview
-    st.subheader("📋 Export Preview")
-    st.info(f"Exporting {len(export_data)} records in {export_format} format")
-    
-    if export_format == "JSON":
-        st.json(export_data[:3] if len(export_data) > 3 else export_data)
-        if len(export_data) > 3:
-            st.caption("... (showing first 3 records)")
-    else:
-        st.dataframe(pd.DataFrame(export_data).head(), use_container_width=True)
-        if len(export_data) > 5:
-            st.caption("... (showing first 5 records)")
-    
-    # Download button
-    filename = f"aroi_validation_results.{file_extension}"
-    
-    st.download_button(
-        label=f"📥 Download {export_format} File",
-        data=export_content,
-        file_name=filename,
-        mime=mime_type,
-        help=f"Download validation results as {export_format} file"
-    )
-    
-    # Summary statistics
-    st.subheader("📊 Export Summary")
-    total_exported = len(export_data)
-    valid_exported = sum(1 for r in export_data if r['valid'])
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Records to Export", total_exported)
-    with col2:
-        st.metric("Valid Records", valid_exported)
+        interactive_mode()
+
 
 if __name__ == "__main__":
     main()
