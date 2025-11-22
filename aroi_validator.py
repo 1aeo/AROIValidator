@@ -192,7 +192,7 @@ class ParallelAROIValidator:
             urls_to_try.append(f"{www_base}/.well-known/tor-relay/rsa-fingerprint.txt")
         
         fingerprint = relay['fingerprint'].upper()
-        last_error = None
+        all_errors = []
         
         for proof_url in urls_to_try:
             try:
@@ -210,17 +210,22 @@ class ParallelAROIValidator:
                     })
                     return result
                 else:
-                    last_error = f"Fingerprint not found in {proof_url}"
+                    all_errors.append(f"Fingerprint not found in {proof_url}")
                     
             except requests.exceptions.HTTPError as e:
                 # Handle HTTP errors (403, 404, etc.)
-                last_error = f"{e.response.status_code} {e.response.reason} for {proof_url}"
+                all_errors.append(f"{e.response.status_code} {e.response.reason} for {proof_url}")
                 
             except Exception as e:
-                last_error = f"Failed to fetch {proof_url}: {str(e)}"
+                all_errors.append(f"Failed to fetch {proof_url}: {str(e)}")
         
-        # If we get here, all attempts failed
-        result['error'] = last_error if last_error else "Failed to fetch URI proof"
+        # If we get here, all attempts failed - show all errors
+        if len(all_errors) > 1:
+            result['error'] = "; ".join(all_errors)
+        elif all_errors:
+            result['error'] = all_errors[0]
+        else:
+            result['error'] = "Failed to fetch URI proof"
         return result
     
     def _check_fingerprint_in_response(self, text: str, fingerprint: str) -> bool:
