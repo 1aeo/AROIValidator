@@ -134,7 +134,7 @@ def interactive_mode():
                 'Valid': '✅' if result['valid'] else '❌',
                 'Proof Type': result.get('proof_type', 'None'),
                 'Domain': result.get('domain', 'N/A'),
-                'Error': result.get('error', '')[:50] if result.get('error') else ''
+                'Error': result.get('error', '') if result.get('error') else ''
             })
         
         df = pd.DataFrame(df_data)
