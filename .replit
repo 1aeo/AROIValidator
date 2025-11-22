@@ -1,7 +1,7 @@
 modules = ["python-3.11"]
 
 [nix]
-channel = "stable-24_05"
+channel = "stable-25_05"
 packages = ["cacert", "glibcLocales"]
 
 [deployment]
@@ -34,9 +34,16 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
+localPort = 35421
+externalPort = 3002
+
+[[ports]]
 localPort = 37287
 externalPort = 3001
 
 [[ports]]
 localPort = 40003
 externalPort = 3000
+
+[agent]
+expertMode = true
