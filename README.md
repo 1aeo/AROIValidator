@@ -2,6 +2,18 @@
 
 A web-based validation tool for evaluating AI responses using the Accuracy, Relevance, Objectivity, and Informativeness (AROI) framework.
 
+## Quick Start
+
+```bash
+# Install dependencies and configure
+python setup.py
+
+# Run the application
+streamlit run app.py --server.port 5000
+```
+
+That's it! The setup script handles all dependencies and configuration.
+
 ## Features
 
 - **Web Interface**: User-friendly Streamlit application for validating AI responses
