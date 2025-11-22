@@ -48,7 +48,10 @@ def interactive_mode():
             # Get configuration
             use_parallel = st.session_state.get('use_parallel', True)
             max_workers = st.session_state.get('max_workers', 10)
-            limit = st.session_state.get('validation_limit', 100)
+            limit = st.session_state.get('validation_limit', 0)
+            # Convert 0 to None for "all relays"
+            if limit == 0:
+                limit = None
             
             def progress_callback(current, total, result):
                 if st.session_state.validation_stopped:
@@ -164,12 +167,12 @@ def interactive_mode():
             )
         
         st.session_state.validation_limit = st.number_input(
-            "Max Relays to Validate",
-            min_value=1,
-            max_value=1000,
-            value=100,
+            "Max Relays to Validate (0 = all)",
+            min_value=0,
+            max_value=10000,
+            value=0,
             step=10,
-            help="Limit the number of relays to validate"
+            help="Limit the number of relays to validate (0 = validate all)"
         )
         
         st.divider()
