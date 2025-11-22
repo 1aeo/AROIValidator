@@ -11,10 +11,28 @@ import re
 import dns.resolver
 import dns.dnssec
 import dns.rdatatype
+import ssl
+import urllib3
 from typing import Dict, Any, List, Optional, Callable
 from urllib.parse import urlparse, urljoin
 from datetime import datetime
 from pathlib import Path
+
+# Disable SSL warnings for legacy servers
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+class LegacyTLSAdapter(requests.adapters.HTTPAdapter):
+    """Custom adapter to support legacy TLS versions"""
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        # Enable support for older TLS versions
+        ctx.minimum_version = ssl.TLSVersion.TLSv1
+        ctx.set_ciphers('DEFAULT@SECLEVEL=1')
+        kwargs['ssl_context'] = ctx
+        return super().init_poolmanager(*args, **kwargs)
 
 
 class ParallelAROIValidator:
@@ -27,6 +45,10 @@ class ParallelAROIValidator:
         self.session.headers.update({
             'User-Agent': 'AROIValidator/1.0'
         })
+        # Mount legacy TLS adapter for both http and https
+        legacy_adapter = LegacyTLSAdapter()
+        self.session.mount('https://', legacy_adapter)
+        self.session.mount('http://', legacy_adapter)
         
     def fetch_relay_data(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """Fetch relay data from Onionoo API"""
@@ -174,8 +196,8 @@ class ParallelAROIValidator:
         
         for proof_url in urls_to_try:
             try:
-                # Try with SSL verification first
-                response = self.session.get(proof_url, timeout=10, verify=True)
+                # Try with legacy TLS support (adapter handles SSL context)
+                response = self.session.get(proof_url, timeout=10, verify=False)
                 response.raise_for_status()
                 
                 # Check if fingerprint is listed in the file
@@ -189,25 +211,6 @@ class ParallelAROIValidator:
                     return result
                 else:
                     last_error = f"Fingerprint not found in {proof_url}"
-                    
-            except requests.exceptions.SSLError as e:
-                # Retry without SSL verification for SSL errors
-                try:
-                    response = self.session.get(proof_url, timeout=10, verify=False)
-                    response.raise_for_status()
-                    
-                    if self._check_fingerprint_in_response(response.text, fingerprint):
-                        result['valid'] = True
-                        result['validation_steps'].append({
-                            'step': 'URI proof fetch',
-                            'success': True,
-                            'details': f"Found fingerprint in {proof_url} (SSL verification disabled)"
-                        })
-                        return result
-                    else:
-                        last_error = f"Fingerprint not found in {proof_url}"
-                except Exception as retry_e:
-                    last_error = f"Failed to fetch {proof_url}: {str(retry_e)}"
                     
             except requests.exceptions.HTTPError as e:
                 # Handle HTTP errors (403, 404, etc.)
