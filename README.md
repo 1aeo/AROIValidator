@@ -4,39 +4,33 @@ A validation tool for Tor relay operator proofs using the Accuracy, Relevance, O
 
 ## Quick Start
 
-### Web Interface
 ```bash
 # Install dependencies and configure
 python setup.py
 
-# Run the application
-streamlit run app.py --server.port 5000
+# Run the application (default is interactive web UI)
+python aroi_cli.py
+
+# Or run specific modes
+python aroi_cli.py interactive  # Web UI for validation
+python aroi_cli.py batch        # Command-line batch processing  
+python aroi_cli.py viewer       # Web UI for viewing results
 ```
 
-### Command Line
+Alternative for web UI only:
 ```bash
-# Interactive mode (web UI)
-python aroi_cli.py interactive
-
-# Batch processing mode
-python aroi_cli.py batch
-
-# Results viewer mode
-python aroi_cli.py viewer
+streamlit run app.py --server.port 5000
 ```
 
 ## Script Parameters
 
 ### aroi_cli.py
-The main command-line interface accepts a mode parameter:
-- `interactive` - Launches the web UI for interactive validation
+The main entry point for all operations. Accepts one mode parameter:
+- `interactive` (default) - Launches the web UI for interactive validation
 - `batch` - Runs automated validation with JSON output
 - `viewer` - Opens the web-based results viewer
 
-### app.py
-Streamlit application with optional parameters:
-- `--server.port` - Port number (default: 8501, use 5000 for Replit)
-- `--mode` - Operation mode: interactive, batch, or viewer
+Note: `app.py` contains the actual implementation but users should use `aroi_cli.py` as the entry point.
 
 ### Batch Mode Environment Variables
 Configure batch validation using environment variables:
