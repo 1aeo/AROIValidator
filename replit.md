@@ -2,9 +2,9 @@
 
 ## Overview
 
-The AROI Validator is a validation tool for evaluating Tor relay operator proofs using the Accuracy, Relevance, Objectivity, and Informativeness (AROI) framework. The application validates relay operator contact information through DNS and URI-based RSA proofs, querying the Tor network's Onionoo API to fetch relay data and verify cryptographic proofs of ownership.
+AROI Validator is a specialized tool for validating Tor relay operator proofs using the Accuracy, Relevance, Objectivity, and Informativeness (AROI) framework. The application validates relay operator contact information through DNS TXT records and URI-based RSA cryptographic proofs. It features both an interactive web interface built with Streamlit and a command-line interface for batch processing operations.
 
-The system provides both a web-based interface (Streamlit) and command-line tools for batch processing Tor relay validations with parallel processing capabilities.
+The validator fetches relay data from the Tor Project's Onionoo API, extracts AROI proof fields from relay contact information, validates these proofs against DNS records or URIs, and generates comprehensive validation reports with success rate analytics.
 
 ## User Preferences
 
@@ -14,138 +14,84 @@ Preferred communication style: Simple, everyday language.
 
 ### Application Structure
 
-The application follows a modular Python architecture with three primary entry points:
+The application follows a modular, three-tier architecture:
 
-1. **app.py** - Streamlit web application providing interactive UI for relay validation
-2. **aroi_cli.py** - Command-line dispatcher supporting interactive, batch, and viewer modes
-3. **aroi_validator.py** - Core validation engine with parallel processing support
+1. **Presentation Layer** (`app.py`) - Streamlit-based web interface providing interactive validation controls, real-time progress tracking, and result visualization with pandas DataFrames
+2. **CLI Dispatcher** (`aroi_cli.py`) - Command-line entry point supporting three operational modes: interactive (web UI), batch (automated processing), and viewer (results browser)
+3. **Core Validation Engine** (`aroi_validator.py`) - The ParallelAROIValidator class handles all validation logic with concurrent processing capabilities
 
-**Rationale**: Separating concerns between UI (Streamlit), CLI orchestration, and validation logic allows for flexible usage patterns while maintaining a single source of truth for validation logic.
+### Parallel Processing Design
 
-### Frontend Architecture
+**Problem**: Validating large numbers of Tor relays sequentially is time-consuming, with each validation requiring network I/O for DNS lookups and HTTP requests.
 
-**Technology**: Streamlit web framework
+**Solution**: Concurrent validation using Python's ThreadPoolExecutor with configurable worker pools (default: 10 workers).
 
-**Design Decision**: Streamlit was chosen for rapid development of an interactive web interface without requiring separate frontend/backend implementation. It provides:
-- Real-time validation feedback
-- Session state management for tracking validation progress
-- Built-in progress bars and status updates
-- Data visualization with pandas integration
+**Rationale**: Network I/O-bound operations benefit from thread-based parallelism. ThreadPoolExecutor provides a simple, managed approach to concurrent processing without the complexity of multiprocessing. The 10-worker default balances throughput with resource consumption.
 
-**Trade-offs**: 
-- Pros: Fast development, Python-native, built-in UI components
-- Cons: Limited customization compared to traditional web frameworks, primarily single-user focused
+**Tradeoffs**: Thread-based parallelism in Python is limited by the GIL for CPU-bound operations, but since validation is primarily I/O-bound (DNS queries, HTTP requests), this is not a constraint. Worker count can be tuned via environment variables or UI controls.
 
-### Backend Architecture
+### Validation Flow Architecture
 
-**Core Component**: ParallelAROIValidator class in aroi_validator.py
+**Multi-stage validation pipeline**:
+1. Fetch relay metadata from Onionoo API (https://onionoo.torproject.org/details)
+2. Parse contact information to extract AROI-specific fields (url, proof, ciissversion)
+3. Determine proof type (dns-rsa or uri-rsa) based on contact format
+4. Execute proof-specific validation (DNS TXT record lookup or URI-based RSA verification)
+5. Aggregate results and calculate statistics by proof type
+6. Persist results as timestamped JSON files
 
-**Key Features**:
-1. Concurrent validation using ThreadPoolExecutor
-2. Configurable worker pool (default: 10 workers)
-3. Custom legacy TLS adapter for compatibility with older Tor relay servers
-4. Session-based HTTP client with custom user agent
+**Design Decision**: The validation pipeline is designed to be fault-tolerant, with each relay validation independent of others. Failed validations are captured with error details rather than halting the entire process.
 
-**Design Pattern**: The validator uses a class-based approach with parallel processing capabilities through Python's concurrent.futures module.
+### Legacy TLS Support
 
-**Security Considerations**: 
-- SSL verification is disabled for legacy Tor relays (TLSv1 support)
-- Custom TLS adapter with reduced security level (SECLEVEL=1) to support older ciphers
-- This is necessary for communicating with legacy Tor infrastructure but documented as a trade-off
+**Problem**: Some relay operators host proof URIs on servers with outdated TLS configurations that modern Python SSL contexts reject.
 
-### Validation Flow
+**Solution**: Custom LegacyTLSAdapter extending requests.adapters.HTTPAdapter with relaxed SSL settings (TLSv1 minimum, SECLEVEL=1, disabled hostname verification).
 
-1. Fetch relay data from Onionoo API
-2. Extract AROI proof fields from relay contact information
-3. Validate proofs via DNS TXT records or URI-based RSA verification
-4. Support for both dns-rsa and uri-rsa proof types
-5. Calculate success rates and categorize results by proof type
+**Rationale**: Ensuring maximum compatibility with diverse relay operator infrastructure. Since proof validation doesn't involve sensitive data transmission, relaxed TLS verification is acceptable.
 
-### Data Storage
+**Security Note**: SSL warnings are suppressed via urllib3.disable_warnings(). This is appropriate for the validation use case but should be reconsidered if the application handles sensitive data.
 
-**Format**: JSON files with timestamped filenames
+### State Management
 
-**Location**: `validation_results/` directory
+**Web Interface State**: Streamlit session_state manages validation lifecycle (validation_results, validation_in_progress, validation_stopped flags) to provide responsive UI updates during long-running parallel operations.
 
-**Schema**:
-```json
-{
-  "metadata": {
-    "timestamp": "ISO timestamp",
-    "total_relays": int,
-    "valid_relays": int,
-    "invalid_relays": int,
-    "success_rate": float
-  },
-  "statistics": {
-    "proof_types": {
-      "dns_rsa": {...},
-      "uri_rsa": {...},
-      "no_proof": {...}
-    }
-  },
-  "results": [...]
-}
-```
+**Results Persistence**: JSON-based storage in `validation_results/` directory with ISO timestamp filenames plus a `latest.json` symlink/copy for quick access to most recent results.
 
-**Rationale**: JSON provides human-readable results that can be easily consumed by the viewer mode or external tools. Results are timestamped for historical tracking, with a `latest.json` symlink for quick access.
+### DNS Resolution
 
-### Configuration Management
+Uses dnspython library for DNS operations, supporting both standard DNS queries and DNSSEC validation capabilities (dns.resolver, dns.dnssec modules imported).
 
-**Method**: Streamlit configuration via `.streamlit/config.toml`
+### Session Management
 
-**Setup Script**: setup.py handles dependency installation and configuration
-
-**Dependencies**:
-- streamlit - Web UI framework
-- dnspython - DNS resolution and DNSSEC validation
-- pandas - Data manipulation and display
-- requests - HTTP client
-- urllib3 - HTTP library with custom SSL handling
-
-**Rationale**: Automated setup script simplifies deployment on new environments (particularly Replit), handling both uv (Replit's package manager) and pip as fallbacks.
+A persistent requests.Session object with custom User-Agent ('AROIValidator/1.0') is maintained for efficient HTTP connection pooling across multiple relay validations.
 
 ## External Dependencies
 
-### Third-Party APIs
+### Required Python Packages
 
-**Onionoo API** (`https://onionoo.torproject.org/details`)
-- Purpose: Tor network relay status and metadata
-- Usage: Fetches relay details including contact information for validation
-- No authentication required
-- Rate limiting considerations apply
+- **streamlit** - Web UI framework for interactive validation interface
+- **dnspython** - DNS resolution and DNSSEC validation for dns-rsa proof type
+- **pandas** - Data manipulation and result visualization in Streamlit UI
+- **requests** - HTTP client for Onionoo API access and uri-rsa proof validation
+- **urllib3** - Low-level HTTP utilities, used for SSL warning suppression
 
-### Python Libraries
+### External APIs
 
-**Core Dependencies**:
-- `streamlit` - Web application framework for interactive UI
-- `dnspython` - DNS query and DNSSEC validation
-- `pandas` - Data structures for relay statistics and result display
-- `requests` - HTTP client with session management
-- `urllib3` - Low-level HTTP handling with SSL customization
+- **Onionoo API** (https://onionoo.torproject.org/details) - Tor Project's relay metadata service, provides JSON-formatted relay details including contact information, fingerprints, and nicknames
 
-**Standard Library**:
-- `concurrent.futures` - Parallel processing via ThreadPoolExecutor
-- `ssl` - TLS/SSL context configuration
-- `json` - Result serialization
-- `base64` - Encoding for cryptographic operations
-- `pathlib` - File system operations
+### Development Tools
 
-### Network Services
+- **uv** - Replit's preferred package manager (with pip fallback in setup.py)
+- Package installation handled by `setup.py` with automatic Streamlit configuration generation
 
-**DNS Resolution**:
-- Used for dns-rsa proof validation via TXT records
-- DNSSEC validation support included in validation flow
-- Relies on system DNS resolver configuration
+### File System Dependencies
 
-**HTTP/HTTPS**:
-- Legacy TLS support (TLSv1+) for older Tor relay servers
-- Custom SSL context with reduced security requirements
-- Session pooling for performance optimization
+- **Validation Results Directory** (`validation_results/`) - Persistent storage for validation run outputs, storing JSON files with metadata, statistics, and per-relay validation details
+- **Streamlit Configuration** (`.streamlit/config.toml`) - Auto-generated server configuration for headless operation on port 5000
 
-### Deployment Platform
+### Environment Variables (Batch Mode)
 
-**Replit-Specific**:
-- Configuration assumes port 5000 for Streamlit server
-- Setup script detects and prefers `uv` package manager
-- Headless server mode enabled by default
+- `BATCH_LIMIT` - Maximum number of relays to validate (default: 100)
+- `PARALLEL` - Enable/disable parallel processing (default: true)
+- `MAX_WORKERS` - Thread pool size for concurrent validation (default: 10)

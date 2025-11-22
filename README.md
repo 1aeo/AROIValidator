@@ -1,6 +1,6 @@
 # AROI Validator
 
-A web-based validation tool for evaluating AI responses using the Accuracy, Relevance, Objectivity, and Informativeness (AROI) framework.
+A validation tool for Tor relay operator proofs using the Accuracy, Relevance, Objectivity, and Informativeness (AROI) framework. Validates relay operator contact information through DNS and URI-based RSA proofs by querying the Tor network's Onionoo API.
 
 ## Quick Start
 
@@ -12,66 +12,56 @@ python setup.py
 streamlit run app.py --server.port 5000
 ```
 
-That's it! The setup script handles all dependencies and configuration.
-
 ## Features
 
-- **Web Interface**: User-friendly Streamlit application for validating AI responses
-- **Command Line Tool**: CLI interface for batch processing and automation
-- **Comprehensive Validation**: Evaluates responses across multiple quality dimensions
-- **Automated Scoring**: Calculates weighted scores based on AROI criteria
-- **Result Tracking**: Saves validation results with timestamps for analysis
+- **Web Interface**: Streamlit application for interactive relay validation
+- **Command Line Tool**: CLI interface for batch processing (`python aroi_cli.py`)
+- **Parallel Processing**: Concurrent validation with ThreadPoolExecutor (10 workers)
+- **Proof Types**: Supports both dns-rsa and uri-rsa validation
+- **Result Tracking**: JSON output with timestamps in `validation_results/`
 
-## How to Use
+## Architecture
 
-### Web Application
+### Core Components
 
-Run the Streamlit web interface:
-```bash
-streamlit run app.py --server.port 5000
+- **app.py** - Streamlit web UI for interactive validation
+- **aroi_cli.py** - Command-line dispatcher for batch operations
+- **aroi_validator.py** - Core validation engine with parallel processing
+
+### Validation Flow
+
+1. Fetch relay data from Onionoo API
+2. Extract AROI proof fields from relay contact info
+3. Validate proofs via DNS TXT records or URI-based RSA
+4. Calculate success rates by proof type
+5. Save results as timestamped JSON
+
+### Data Storage
+
+Results saved to `validation_results/` as JSON:
+```json
+{
+  "metadata": {
+    "timestamp": "ISO timestamp",
+    "total_relays": int,
+    "valid_relays": int,
+    "success_rate": float
+  },
+  "statistics": { ... },
+  "results": [ ... ]
+}
 ```
 
-The web interface provides:
-- Text input for questions and AI responses
-- Real-time validation with detailed scoring
-- Visual feedback on response quality
-- History of recent validations
+## Dependencies
 
-### Command Line Interface
+- **streamlit** - Web UI framework
+- **dnspython** - DNS/DNSSEC validation
+- **pandas** - Data manipulation
+- **requests** - HTTP client
+- **urllib3** - SSL/TLS handling
 
-Use the CLI for batch validation:
-```bash
-python aroi_cli.py "Your question" "AI response to validate"
-```
+## Security Notes
 
-The CLI will output:
-- Individual scores for each AROI dimension
-- Overall weighted score
-- Quality assessment and recommendations
-
-## Validation Metrics
-
-The AROI framework evaluates responses on:
-
-1. **Accuracy** (30% weight) - Correctness and factual accuracy
-2. **Relevance** (30% weight) - How well the response addresses the question
-3. **Objectivity** (20% weight) - Neutral tone and balanced perspective
-4. **Informativeness** (20% weight) - Depth and completeness of information
-
-## Output
-
-Validation results are saved to `validation_results/` directory as JSON files containing:
-- Question and response text
-- Individual dimension scores
-- Overall weighted score
-- Detailed feedback
-- Timestamp
-
-## Requirements
-
-- Python 3.x
-- Streamlit
-- Pandas
-- Requests
-
-All dependencies are managed automatically through the project configuration.
+- Custom TLS adapter for legacy Tor relay compatibility (TLSv1+)
+- Reduced security level (SECLEVEL=1) for older cipher support
+- Required for communicating with legacy Tor infrastructure
