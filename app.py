@@ -13,7 +13,7 @@ def interactive_mode():
     """Interactive validation mode with Streamlit UI"""
     import streamlit as st
     import pandas as pd
-    from aroi_validator_parallel import (
+    from aroi_validator import (
         run_validation, calculate_statistics, save_results,
         load_results, list_result_files
     )
@@ -212,7 +212,7 @@ def viewer_mode():
     """View saved validation results"""
     import streamlit as st
     import pandas as pd
-    from aroi_validator_parallel import load_results, list_result_files
+    from aroi_validator import load_results, list_result_files
     
     st.set_page_config(
         page_title="AROI Validator - Results Viewer",
@@ -271,7 +271,7 @@ def viewer_mode():
 
 def batch_mode():
     """Batch validation mode for automation"""
-    from aroi_validator_parallel import (
+    from aroi_validator import (
         run_validation, calculate_statistics, save_results
     )
     
