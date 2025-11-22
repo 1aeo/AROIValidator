@@ -154,8 +154,8 @@ class ParallelAROIValidator:
         result['proof_type'] = 'uri-rsa'
         result['domain'] = self._extract_domain(url)
         
-        # Construct proof URL
-        proof_url = urljoin(url.rstrip('/') + '/', f".well-known/aroi-proof/{relay['fingerprint'].lower()}.txt")
+        # Construct proof URL according to ContactInfo spec v2
+        proof_url = urljoin(url.rstrip('/') + '/', f".well-known/tor-relay/{relay['fingerprint'].lower()}.txt")
         
         # Fetch proof
         try:
@@ -188,8 +188,9 @@ class ParallelAROIValidator:
             return None
     
     def _validate_proof_content(self, content_list: List[str], fingerprint: str) -> bool:
-        """Validate proof content"""
-        expected_proof = f"aroi-proof:{fingerprint.lower()}"
+        """Validate proof content according to ContactInfo spec v2"""
+        # ContactInfo spec v2 requires "we-run-this-tor-relay" text
+        expected_proof = "we-run-this-tor-relay"
         return any(expected_proof in content.lower() for content in content_list)
     
     def validate_parallel(
