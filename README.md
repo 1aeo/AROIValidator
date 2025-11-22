@@ -1,160 +1,69 @@
-# AROI Validator - Replit Setup Guide
+# AROI Validator
 
-A comprehensive Tor relay AROI (Autonomous Relay Operator Identity) validation system with three operational modes: interactive validation, automated batch processing, and results viewing.
-
-## Quick Setup
-
-### Automatic Setup (Recommended)
-Run the setup script to automatically configure everything:
-
-```bash
-python setup.py
-```
-
-This will:
-- Install all required dependencies (streamlit, dnspython, pandas, requests, urllib3)
-- Create Streamlit configuration for proper deployment
-- Verify project structure
-- Create helper scripts
-
-### Manual Setup
-If you prefer manual setup:
-
-1. **Install Dependencies**
-   ```bash
-   # Using Replit's package manager (recommended)
-   uv add streamlit dnspython pandas requests urllib3
-   
-   # Or using pip
-   pip install streamlit dnspython pandas requests urllib3
-   ```
-
-2. **Create Streamlit Configuration**
-   Create `.streamlit/config.toml`:
-   ```toml
-   [server]
-   headless = true
-   address = "0.0.0.0"
-   port = 5000
-   ```
-
-## Running the Application
-
-### Three Operational Modes
-
-1. **Interactive Mode** (Default)
-   ```bash
-   python aroi_cli.py interactive
-   ```
-   Full web interface with real-time validation controls
-
-2. **Batch Mode**
-   ```bash
-   python aroi_cli.py batch
-   ```
-   Automated validation with JSON output for monitoring systems
-
-3. **Viewer Mode**
-   ```bash
-   python aroi_cli.py viewer
-   ```
-   Web interface displaying validation results without validation controls
-
-### Quick Start Script
-```bash
-./run.sh
-```
-Runs the interactive mode directly.
-
-## Project Structure
-
-```
-aroi-validator/
-├── aroi_cli.py           # Main CLI dispatcher
-├── aroi_validator.py     # Core validation logic
-├── app_interactive.py    # Interactive Streamlit interface
-├── app_viewer.py         # Results viewer interface
-├── batch_validator.py    # Batch processing script
-├── setup.py             # Automated setup script
-├── run.sh               # Quick run script
-├── .streamlit/
-│   └── config.toml      # Streamlit configuration
-└── README.md            # This file
-```
+A web-based validation tool for evaluating AI responses using the Accuracy, Relevance, Objectivity, and Informativeness (AROI) framework.
 
 ## Features
 
-- **DNS-RSA and URI-RSA** proof validation with DNSSEC verification
-- **Real-time progress tracking** with start/stop controls
-- **Comprehensive error reporting** with detailed validation steps
-- **Export capabilities** and result filtering
-- **Automated batch processing** suitable for cron job integration
+- **Web Interface**: User-friendly Streamlit application for validating AI responses
+- **Command Line Tool**: CLI interface for batch processing and automation
+- **Comprehensive Validation**: Evaluates responses across multiple quality dimensions
+- **Automated Scoring**: Calculates weighted scores based on AROI criteria
+- **Result Tracking**: Saves validation results with timestamps for analysis
 
-## Integration Examples
+## How to Use
 
-### Cron Job Automation
+### Web Application
+
+Run the Streamlit web interface:
 ```bash
-# Add to crontab for daily validation
-0 2 * * * cd /path/to/aroi-validator && python aroi_cli.py batch
+./run.sh
+```
+Or directly:
+```bash
+streamlit run app.py --server.port 5000
 ```
 
-### Monitoring System Integration
+The web interface provides:
+- Text input for questions and AI responses
+- Real-time validation with detailed scoring
+- Visual feedback on response quality
+- History of recent validations
+
+### Command Line Interface
+
+Use the CLI for batch validation:
 ```bash
-# Run batch validation and parse JSON output
-python aroi_cli.py batch
-cat validation_results_*.json | jq '.summary.total_validated'
+python aroi_cli.py "Your question" "AI response to validate"
 ```
 
-### Dashboard Integration
-```bash
-# Run viewer mode for stakeholder access
-python aroi_cli.py viewer
-```
+The CLI will output:
+- Individual scores for each AROI dimension
+- Overall weighted score
+- Quality assessment and recommendations
 
-## Troubleshooting
+## Validation Metrics
 
-### Common Issues
+The AROI framework evaluates responses on:
 
-1. **Module not found errors**
-   ```bash
-   python setup.py  # Run setup script
-   ```
+1. **Accuracy** (30% weight) - Correctness and factual accuracy
+2. **Relevance** (30% weight) - How well the response addresses the question
+3. **Objectivity** (20% weight) - Neutral tone and balanced perspective
+4. **Informativeness** (20% weight) - Depth and completeness of information
 
-2. **Port conflicts**
-   The application uses port 5000. Ensure it's available.
+## Output
 
-3. **DNS resolution issues**
-   Check network connectivity and DNS settings.
+Validation results are saved to `validation_results/` directory as JSON files containing:
+- Question and response text
+- Individual dimension scores
+- Overall weighted score
+- Detailed feedback
+- Timestamp
 
-### Logs and Debugging
-- Interactive mode: Check browser console and Streamlit logs
-- Batch mode: Results saved to timestamped JSON files
-- All modes: Detailed error messages in terminal output
+## Requirements
 
-## Security Considerations
+- Python 3.x
+- Streamlit
+- Pandas
+- Requests
 
-- Uses DNSSEC validation for enhanced security
-- Separates client/server concerns properly
-- No sensitive data stored in configuration files
-- Follows secure coding practices for network requests
-
-## Development
-
-### Adding New Features
-1. Core validation logic: `aroi_validator.py`
-2. Interactive UI: `app_interactive.py`
-3. Batch processing: `batch_validator.py`
-4. CLI interface: `aroi_cli.py`
-
-### Testing
-Run the setup script to verify environment:
-```bash
-python setup.py
-```
-
-## Support
-
-For issues with:
-- **Replit deployment**: Check `.streamlit/config.toml` configuration
-- **DNS validation**: Verify network connectivity
-- **Performance**: Consider batch mode for large datasets
+All dependencies are managed automatically through the project configuration.
