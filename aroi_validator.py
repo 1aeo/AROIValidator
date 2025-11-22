@@ -151,11 +151,15 @@ class ParallelAROIValidator:
         if not url.startswith(('http://', 'https://')):
             url = 'https://' + url
         
+        # Extract base URL (scheme + domain only, no path)
+        parsed = urlparse(url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+        
         result['proof_type'] = 'uri-rsa'
-        result['domain'] = self._extract_domain(url)
+        result['domain'] = parsed.netloc
         
         # Construct proof URL according to ContactInfo spec v2
-        proof_url = urljoin(url.rstrip('/') + '/', f".well-known/tor-relay/{relay['fingerprint'].lower()}.txt")
+        proof_url = f"{base_url}/.well-known/tor-relay/{relay['fingerprint'].lower()}.txt"
         
         # Fetch proof
         try:
