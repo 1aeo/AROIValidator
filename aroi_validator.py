@@ -158,43 +158,80 @@ class ParallelAROIValidator:
         result['proof_type'] = 'uri-rsa'
         result['domain'] = parsed.netloc
         
-        # Construct proof URL - spec says to fetch rsa-fingerprint.txt (single file)
-        proof_url = f"{base_url}/.well-known/tor-relay/rsa-fingerprint.txt"
+        # Try multiple URL variations
+        urls_to_try = []
         
-        # Fetch proof
-        try:
-            response = self.session.get(proof_url, timeout=10)
-            response.raise_for_status()
-            
-            # Check if fingerprint is listed in the file (one fingerprint per line)
-            fingerprint = relay['fingerprint'].upper()
-            lines = response.text.strip().split('\n')
-            
-            # Check each line for the fingerprint (ignoring comments and empty lines)
-            valid = False
-            for line in lines:
-                line = line.strip()
-                # Skip comments and empty lines
-                if line.startswith('#') or not line:
-                    continue
-                # Check if this line contains the fingerprint (case-insensitive)
-                if fingerprint == line.upper():
-                    valid = True
-                    break
-            
-            if valid:
-                result['valid'] = True
-                result['validation_steps'].append({
-                    'step': 'URI proof fetch',
-                    'success': True,
-                    'details': f"Found fingerprint in {proof_url}"
-                })
-            else:
-                result['error'] = f"Fingerprint not found in {proof_url}"
-        except Exception as e:
-            result['error'] = f"Failed to fetch URI proof: {str(e)}"
+        # Original URL
+        urls_to_try.append(f"{base_url}/.well-known/tor-relay/rsa-fingerprint.txt")
         
+        # Try with www prefix if not already present
+        if not parsed.netloc.startswith('www.'):
+            www_base = f"{parsed.scheme}://www.{parsed.netloc}"
+            urls_to_try.append(f"{www_base}/.well-known/tor-relay/rsa-fingerprint.txt")
+        
+        fingerprint = relay['fingerprint'].upper()
+        last_error = None
+        
+        for proof_url in urls_to_try:
+            try:
+                # Try with SSL verification first
+                response = self.session.get(proof_url, timeout=10, verify=True)
+                response.raise_for_status()
+                
+                # Check if fingerprint is listed in the file
+                if self._check_fingerprint_in_response(response.text, fingerprint):
+                    result['valid'] = True
+                    result['validation_steps'].append({
+                        'step': 'URI proof fetch',
+                        'success': True,
+                        'details': f"Found fingerprint in {proof_url}"
+                    })
+                    return result
+                else:
+                    last_error = f"Fingerprint not found in {proof_url}"
+                    
+            except requests.exceptions.SSLError as e:
+                # Retry without SSL verification for SSL errors
+                try:
+                    response = self.session.get(proof_url, timeout=10, verify=False)
+                    response.raise_for_status()
+                    
+                    if self._check_fingerprint_in_response(response.text, fingerprint):
+                        result['valid'] = True
+                        result['validation_steps'].append({
+                            'step': 'URI proof fetch',
+                            'success': True,
+                            'details': f"Found fingerprint in {proof_url} (SSL verification disabled)"
+                        })
+                        return result
+                    else:
+                        last_error = f"Fingerprint not found in {proof_url}"
+                except Exception as retry_e:
+                    last_error = f"Failed to fetch {proof_url}: {str(retry_e)}"
+                    
+            except requests.exceptions.HTTPError as e:
+                # Handle HTTP errors (403, 404, etc.)
+                last_error = f"{e.response.status_code} {e.response.reason} for {proof_url}"
+                
+            except Exception as e:
+                last_error = f"Failed to fetch {proof_url}: {str(e)}"
+        
+        # If we get here, all attempts failed
+        result['error'] = last_error if last_error else "Failed to fetch URI proof"
         return result
+    
+    def _check_fingerprint_in_response(self, text: str, fingerprint: str) -> bool:
+        """Check if fingerprint exists in response text"""
+        lines = text.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            # Skip comments and empty lines
+            if line.startswith('#') or not line:
+                continue
+            # Check if this line contains the fingerprint (case-insensitive)
+            if fingerprint == line.upper():
+                return True
+        return False
     
     def _extract_domain(self, url: str) -> Optional[str]:
         """Extract domain from URL"""
