@@ -141,7 +141,7 @@ class ParallelAROIValidator:
         return result
     
     def _validate_uri_rsa(self, relay: Dict, aroi_fields: Dict, result: Dict) -> Dict:
-        """Validate URI-RSA proof"""
+        """Validate URI-RSA proof according to ContactInfo spec"""
         url = aroi_fields.get('url')
         if not url:
             result['error'] = "Missing URL for uri-rsa proof"
@@ -158,24 +158,39 @@ class ParallelAROIValidator:
         result['proof_type'] = 'uri-rsa'
         result['domain'] = parsed.netloc
         
-        # Construct proof URL according to ContactInfo spec v2
-        proof_url = f"{base_url}/.well-known/tor-relay/{relay['fingerprint'].lower()}.txt"
+        # Construct proof URL - spec says to fetch rsa-fingerprint.txt (single file)
+        proof_url = f"{base_url}/.well-known/tor-relay/rsa-fingerprint.txt"
         
         # Fetch proof
         try:
             response = self.session.get(proof_url, timeout=10)
             response.raise_for_status()
             
-            # Validate proof content
-            if self._validate_proof_content([response.text], relay['fingerprint']):
+            # Check if fingerprint is listed in the file (one fingerprint per line)
+            fingerprint = relay['fingerprint'].upper()
+            lines = response.text.strip().split('\n')
+            
+            # Check each line for the fingerprint (ignoring comments and empty lines)
+            valid = False
+            for line in lines:
+                line = line.strip()
+                # Skip comments and empty lines
+                if line.startswith('#') or not line:
+                    continue
+                # Check if this line contains the fingerprint (case-insensitive)
+                if fingerprint == line.upper():
+                    valid = True
+                    break
+            
+            if valid:
                 result['valid'] = True
                 result['validation_steps'].append({
                     'step': 'URI proof fetch',
                     'success': True,
-                    'details': f"Found valid proof at {proof_url}"
+                    'details': f"Found fingerprint in {proof_url}"
                 })
             else:
-                result['error'] = "Invalid proof content at URI"
+                result['error'] = f"Fingerprint not found in {proof_url}"
         except Exception as e:
             result['error'] = f"Failed to fetch URI proof: {str(e)}"
         
@@ -192,8 +207,8 @@ class ParallelAROIValidator:
             return None
     
     def _validate_proof_content(self, content_list: List[str], fingerprint: str) -> bool:
-        """Validate proof content according to ContactInfo spec v2"""
-        # ContactInfo spec v2 requires "we-run-this-tor-relay" text
+        """Validate DNS-RSA proof content according to ContactInfo spec v2"""
+        # DNS-RSA requires "we-run-this-tor-relay" text
         expected_proof = "we-run-this-tor-relay"
         return any(expected_proof in content.lower() for content in content_list)
     
