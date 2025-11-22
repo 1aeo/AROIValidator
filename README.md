@@ -4,6 +4,7 @@ A validation tool for Tor relay operator proofs using the Accuracy, Relevance, O
 
 ## Quick Start
 
+### Web Interface
 ```bash
 # Install dependencies and configure
 python setup.py
@@ -12,11 +13,47 @@ python setup.py
 streamlit run app.py --server.port 5000
 ```
 
+### Command Line
+```bash
+# Interactive mode (web UI)
+python aroi_cli.py interactive
+
+# Batch processing mode
+python aroi_cli.py batch
+
+# Results viewer mode
+python aroi_cli.py viewer
+```
+
+## Script Parameters
+
+### aroi_cli.py
+The main command-line interface accepts a mode parameter:
+- `interactive` - Launches the web UI for interactive validation
+- `batch` - Runs automated validation with JSON output
+- `viewer` - Opens the web-based results viewer
+
+### app.py
+Streamlit application with optional parameters:
+- `--server.port` - Port number (default: 8501, use 5000 for Replit)
+- `--mode` - Operation mode: interactive, batch, or viewer
+
+### Batch Mode Environment Variables
+Configure batch validation using environment variables:
+- `BATCH_LIMIT` - Maximum number of relays to validate (default: 100, 0 = all)
+- `PARALLEL` - Enable parallel processing: true/false (default: true)
+- `MAX_WORKERS` - Number of worker threads (default: 10)
+
+Example:
+```bash
+BATCH_LIMIT=500 MAX_WORKERS=20 python aroi_cli.py batch
+```
+
 ## Features
 
 - **Web Interface**: Streamlit application for interactive relay validation
-- **Command Line Tool**: CLI interface for batch processing (`python aroi_cli.py`)
-- **Parallel Processing**: Concurrent validation with ThreadPoolExecutor (10 workers)
+- **Command Line Tool**: CLI interface for batch processing
+- **Parallel Processing**: Concurrent validation with ThreadPoolExecutor
 - **Proof Types**: Supports both dns-rsa and uri-rsa validation
 - **Result Tracking**: JSON output with timestamps in `validation_results/`
 
