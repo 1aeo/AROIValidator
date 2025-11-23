@@ -109,10 +109,10 @@ class ParallelAROIValidator:
         """Parse AROI fields from contact information"""
         fields = {}
         patterns = {
-            'ciissversion': r'ciissversion:(\S+)',
-            'proof': r'proof:(\S+)',
-            'url': r'url:(\S+)',
-            'email': r'email:(\S+)'
+            'ciissversion': r'\bciissversion:(\S+)',
+            'proof': r'\bproof:(\S+)',
+            'url': r'\burl:(\S+)',
+            'email': r'\bemail:(\S+)'
         }
         
         for field, pattern in patterns.items():
