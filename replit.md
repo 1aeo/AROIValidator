@@ -34,13 +34,24 @@ The application follows a modular, three-tier architecture:
 
 **Multi-stage validation pipeline**:
 1. Fetch relay metadata from Onionoo API (https://onionoo.torproject.org/details)
-2. Parse contact information to extract AROI-specific fields (url, proof, ciissversion)
-3. Determine proof type (dns-rsa or uri-rsa) based on contact format
-4. Execute proof-specific validation (DNS TXT record lookup or URI-based RSA verification)
-5. Aggregate results and calculate statistics by proof type
-6. Persist results as timestamped JSON files
+2. **Filter stale relays** - Remove relays offline for more than 14 days (Onionoo bug workaround)
+3. Parse contact information to extract AROI-specific fields (url, proof, ciissversion)
+4. Determine proof type (dns-rsa or uri-rsa) based on contact format
+5. Execute proof-specific validation (DNS TXT record lookup or URI-based RSA verification)
+6. Aggregate results and calculate statistics by proof type
+7. Persist results as timestamped JSON files
 
 **Design Decision**: The validation pipeline is designed to be fault-tolerant, with each relay validation independent of others. Failed validations are captured with error details rather than halting the entire process.
+
+### Stale Relay Filtering
+
+**Problem**: Onionoo API bug ([#40052](https://gitlab.torproject.org/tpo/network-health/metrics/onionoo/-/issues/40052)) where ~244 relays offline for over 1 year are returned despite API documentation stating "all relays...that have been running in the past week" are included.
+
+**Solution**: Client-side filtering in `_filter_active_relays()` method that excludes relays with `running=false` and `last_seen` timestamp older than 14 days.
+
+**Rationale**: Validating stale relays wastes resources and skews statistics. The 14-day threshold provides a buffer beyond the documented 7-day window while still filtering ancient relays.
+
+**Impact**: Reduces validation workload from ~10,937 to ~10,693 relays (~244 filtered), improving performance and accuracy.
 
 ### Legacy TLS Support
 

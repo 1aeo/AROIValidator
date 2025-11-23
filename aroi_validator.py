@@ -51,20 +51,66 @@ class ParallelAROIValidator:
         self.session.mount('http://', legacy_adapter)
         
     def fetch_relay_data(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Fetch relay data from Onionoo API"""
+        """
+        Fetch relay data from Onionoo API and filter out stale relays.
+        
+        Filters out relays that have been offline for more than 14 days to work around
+        Onionoo API bug: https://gitlab.torproject.org/tpo/network-health/metrics/onionoo/-/issues/40052
+        """
         try:
             response = self.session.get(
                 self.onionoo_url,
-                params={'type': 'relay', 'fields': 'nickname,fingerprint,contact'},
+                params={'type': 'relay', 'fields': 'nickname,fingerprint,contact,running,last_seen'},
                 timeout=30
             )
             response.raise_for_status()
             data = response.json()
             relays = data.get('relays', [])
-            return relays[:limit] if limit else relays
+            
+            # Filter out relays offline for more than 14 days
+            filtered_relays = self._filter_active_relays(relays)
+            
+            return filtered_relays[:limit] if limit else filtered_relays
         except Exception as e:
             print(f"Error fetching relay data: {e}")
             return []
+    
+    def _filter_active_relays(self, relays: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Filter out relays that have been offline for more than 14 days.
+        
+        Workaround for Onionoo API bug where relays offline for over a year are returned
+        despite documentation stating only relays from the past week are included.
+        """
+        from datetime import datetime, timedelta
+        
+        active_relays = []
+        now = datetime.utcnow()
+        max_offline_days = 14
+        cutoff_date = now - timedelta(days=max_offline_days)
+        
+        for relay in relays:
+            # If relay is running, include it
+            if relay.get('running', False):
+                active_relays.append(relay)
+                continue
+            
+            # If relay is not running, check last_seen
+            last_seen_str = relay.get('last_seen')
+            if last_seen_str:
+                try:
+                    # Parse timestamp: "2025-11-22 16:00:00"
+                    last_seen = datetime.strptime(last_seen_str, '%Y-%m-%d %H:%M:%S')
+                    
+                    # Include relay if it was seen within the last 14 days
+                    if last_seen >= cutoff_date:
+                        active_relays.append(relay)
+                except ValueError:
+                    # If we can't parse the timestamp, exclude it for safety
+                    continue
+            # If no last_seen field, exclude the relay
+        
+        return active_relays
     
     def validate_relay(self, relay: Dict[str, Any]) -> Dict[str, Any]:
         """Validate a single relay's AROI proof"""

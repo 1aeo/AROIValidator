@@ -62,10 +62,17 @@ BATCH_LIMIT=500 MAX_WORKERS=20 python aroi_cli.py batch
 ### Validation Flow
 
 1. Fetch relay data from Onionoo API
-2. Extract AROI proof fields from relay contact info
-3. Validate proofs via DNS TXT records or URI-based RSA
-4. Calculate success rates by proof type
-5. Save results as timestamped JSON
+2. **Filter out stale relays** (offline > 14 days) - workaround for Onionoo API bug
+3. Extract AROI proof fields from relay contact info
+4. Validate proofs via DNS TXT records or URI-based RSA
+5. Calculate success rates by proof type
+6. Save results as timestamped JSON
+
+### Stale Relay Filtering
+
+The validator automatically filters out relays that have been offline for more than 14 days. This works around an [Onionoo API bug](https://gitlab.torproject.org/tpo/network-health/metrics/onionoo/-/issues/40052) where ~244 relays offline for over a year are incorrectly returned despite documentation stating only relays from the past week are included.
+
+**Impact**: Validates ~10,693 active relays instead of ~10,937 total relays in the API response.
 
 ### Data Storage
 
